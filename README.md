@@ -1,6 +1,6 @@
-# Nanobot - 多租户 AI 助手平台
+# BusinessBot - 多租户 AI 助手平台，方便ToB和ToC商业化
 
-轻量级 AI 助手框架，支持多租户隔离部署、多平台渠道接入、工具调用、定时任务和 Web 实时通信。
+基于nanobot改造的轻量级 AI 助手框架，支持多租户隔离部署、多平台渠道接入、工具调用、定时任务和 Web 实时通信。
 
 ---
 
@@ -23,6 +23,11 @@
 15. [文件索引](#15-文件索引)
 
 ---
+
+## 界面示例截图
+多个用户的聊天页面和它们独自隔离的容器环境
+![multi_users_chat.png](doc/multi_users_chat.png)
+![multi_users_docker.png](doc/multi_users_docker.png)
 
 ## 1. 多租户部署（Docker Compose）
 
