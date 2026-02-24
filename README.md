@@ -10,8 +10,9 @@
   - 改造 nanobot/providers/litellm_provider.py：
     - 新增一个模式：当检测到环境变量 NANOBOT_LLM_PROXY_URL 时，所有 LLM 请求发往该 Proxy
     - 不需要 api_key，改用 X-Container-Token（一个一次性 token，仅用于标识容器身份，不含任何 LLM 密钥信息）
-  - 改造 nanobot/config/schema.py：
-  - nanobot/web新增
+  - 改造 nanobot/config/schema.py：增加is_proxy_mode的配置
+  - nanobot/web 新增Web目录
+  - nanobot/agent/tools下的web.py新增get_wechat_article使用文件weixin_search.py
 
 ## 目录
 
