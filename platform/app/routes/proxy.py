@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.container.manager import ensure_running
-from app.db.engine import get_db
+from app.db.engine import async_session, get_db
 from app.db.models import User
 
 router = APIRouter(prefix="/api/nanobot", tags=["proxy"])
@@ -37,6 +37,10 @@ async def proxy_http(
 ):
     """Forward HTTP requests to the user's nanobot container."""
     base_url = await _container_url(db, user)
+    # Close the session explicitly so the connection returns to the pool
+    # before the potentially long upstream call (up to 120s).
+    await db.close()
+
     target_url = f"{base_url}/api/{path}"
 
     # Forward query params
@@ -71,24 +75,25 @@ async def proxy_websocket(
     websocket: WebSocket,
     session_id: str,
     token: str = "",  # passed as query param ?token=xxx
-    db: AsyncSession = Depends(get_db),
 ):
     """Forward WebSocket connections to the user's nanobot container."""
     from app.auth.service import decode_token, get_user_by_id
 
-    # Authenticate via query param token
-    payload = decode_token(token)
-    if payload is None or payload.get("type") != "access":
-        await websocket.close(code=4001, reason="Invalid token")
-        return
+    # Authenticate and resolve container URL, then release DB session immediately
+    async with async_session() as db:
+        payload = decode_token(token)
+        if payload is None or payload.get("type") != "access":
+            await websocket.close(code=4001, reason="Invalid token")
+            return
 
-    user = await get_user_by_id(db, payload["sub"])
-    if user is None or not user.is_active:
-        await websocket.close(code=4001, reason="User not found")
-        return
+        user = await get_user_by_id(db, payload["sub"])
+        if user is None or not user.is_active:
+            await websocket.close(code=4001, reason="User not found")
+            return
 
-    container = await ensure_running(db, user.id)
-    target_ws_url = f"ws://{container.internal_host}:{container.internal_port}/ws/{session_id}"
+        container = await ensure_running(db, user.id)
+        target_ws_url = f"ws://{container.internal_host}:{container.internal_port}/ws/{session_id}"
+    # DB session is now released — not held during long-lived WebSocket relay
 
     await websocket.accept()
 
