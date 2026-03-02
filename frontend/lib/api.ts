@@ -627,3 +627,81 @@ export async function deleteFile(fileId: string): Promise<void> {
 export function getFileUrl(fileId: string): string {
   return `${API_URL}/api/nanobot/files/${encodeURIComponent(fileId)}`;
 }
+
+// ---------------------------------------------------------------------------
+// Workspace Browser
+// ---------------------------------------------------------------------------
+
+export interface WorkspaceItem {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size: number | null;
+  content_type?: string;
+  modified: string;
+}
+
+export interface BrowseResult {
+  path: string;
+  items: WorkspaceItem[];
+}
+
+export async function browseWorkspace(path: string = ''): Promise<BrowseResult> {
+  const params = path ? `?path=${encodeURIComponent(path)}` : '';
+  return fetchJSON(`/api/nanobot/workspace/browse${params}`);
+}
+
+export function getWorkspaceDownloadUrl(path: string): string {
+  return `${API_URL}/api/nanobot/workspace/download?path=${encodeURIComponent(path)}`;
+}
+
+export async function uploadToWorkspace(
+  file: File,
+  dirPath: string = '',
+  onProgress?: (percent: number) => void
+): Promise<WorkspaceItem> {
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error('File too large (max 50MB)');
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('path', dirPath);
+
+  const token = getAccessToken();
+
+  return new Promise<WorkspaceItem>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_URL}/api/nanobot/workspace/upload`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText));
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('Upload failed'));
+    xhr.send(formData);
+  });
+}
+
+export async function deleteWorkspacePath(path: string): Promise<void> {
+  await fetchJSON(`/api/nanobot/workspace/delete?path=${encodeURIComponent(path)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function createWorkspaceDir(path: string): Promise<WorkspaceItem> {
+  return fetchJSON(`/api/nanobot/workspace/mkdir?path=${encodeURIComponent(path)}`, {
+    method: 'POST',
+  });
+}

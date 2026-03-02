@@ -717,6 +717,81 @@ def _register_routes(app: FastAPI) -> None:
             return {"ok": True}
         raise HTTPException(status_code=404, detail="File not found")
 
+    # ------ Workspace Browser ------
+
+    @app.get("/api/workspace/browse")
+    async def browse_workspace_dir(path: str = ""):
+        """Browse workspace directory contents."""
+        from nanobot.web.files import browse_workspace
+
+        config: Config = app.state.config
+        try:
+            return browse_workspace(config.workspace_path, path)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.get("/api/workspace/download")
+    async def download_workspace_file(path: str):
+        """Download a file from workspace by relative path."""
+        from nanobot.web.files import workspace_file_path
+
+        config: Config = app.state.config
+        file_path = workspace_file_path(config.workspace_path, path)
+        if file_path is None:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        import mimetypes
+        from fastapi.responses import Response
+
+        ct, _ = mimetypes.guess_type(file_path.name)
+        ct = ct or "application/octet-stream"
+        disposition = "inline" if ct.startswith("image/") else "attachment"
+        return Response(
+            content=file_path.read_bytes(),
+            media_type=ct,
+            headers={"Content-Disposition": f'{disposition}; filename="{file_path.name}"'},
+        )
+
+    @app.post("/api/workspace/upload")
+    async def upload_to_workspace(
+        file: UploadFile = File(...),
+        path: str = Form(""),
+    ):
+        """Upload a file to a specific workspace directory."""
+        from nanobot.web.files import save_to_workspace
+
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No filename provided")
+        content = await file.read()
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail="File too large (max 50MB)")
+        config: Config = app.state.config
+        try:
+            return save_to_workspace(config.workspace_path, path, file.filename, content)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.delete("/api/workspace/delete")
+    async def delete_workspace_item(path: str):
+        """Delete a file or directory from workspace."""
+        from nanobot.web.files import delete_workspace_path
+
+        config: Config = app.state.config
+        if delete_workspace_path(config.workspace_path, path):
+            return {"ok": True}
+        raise HTTPException(status_code=404, detail="Path not found")
+
+    @app.post("/api/workspace/mkdir")
+    async def create_workspace_directory(path: str):
+        """Create a directory in workspace."""
+        from nanobot.web.files import create_workspace_dir
+
+        config: Config = app.state.config
+        try:
+            return create_workspace_dir(config.workspace_path, path)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
     # ------ Plugins ------
 
     @app.get("/api/plugins")

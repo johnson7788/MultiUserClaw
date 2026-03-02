@@ -121,3 +121,128 @@ def delete_file(workspace: Path, file_id: str) -> bool:
         return False
     shutil.rmtree(file_dir)
     return True
+
+
+# ---------------------------------------------------------------------------
+# Workspace browser helpers (browse the entire workspace directory)
+# ---------------------------------------------------------------------------
+
+import mimetypes
+
+
+def _resolve_workspace_path(workspace: Path, rel_path: str) -> Path | None:
+    """Resolve a relative path within workspace, rejecting traversal."""
+    workspace = workspace.resolve()
+    target = (workspace / rel_path).resolve()
+    try:
+        target.relative_to(workspace)
+    except ValueError:
+        return None
+    return target
+
+
+def browse_workspace(workspace: Path, rel_path: str = "") -> dict[str, Any]:
+    """List contents of a directory within the workspace."""
+    workspace = workspace.resolve()
+    target = _resolve_workspace_path(workspace, rel_path)
+    if target is None or not target.is_dir():
+        raise ValueError("Invalid directory path")
+
+    items: list[dict[str, Any]] = []
+    try:
+        entries = sorted(target.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower()))
+    except PermissionError:
+        raise ValueError("Permission denied")
+
+    for entry in entries:
+        # Skip hidden files/dirs
+        if entry.name.startswith("."):
+            continue
+        rel = str(entry.relative_to(workspace))
+        if entry.is_dir():
+            items.append({
+                "name": entry.name,
+                "path": rel,
+                "type": "directory",
+                "size": None,
+                "modified": datetime.fromtimestamp(entry.stat().st_mtime, tz=timezone.utc).isoformat(),
+            })
+        elif entry.is_file():
+            stat = entry.stat()
+            ct, _ = mimetypes.guess_type(entry.name)
+            items.append({
+                "name": entry.name,
+                "path": rel,
+                "type": "file",
+                "size": stat.st_size,
+                "content_type": ct or "application/octet-stream",
+                "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            })
+    return {
+        "path": str(target.relative_to(workspace)) if target != workspace else "",
+        "items": items,
+    }
+
+
+def workspace_file_path(workspace: Path, rel_path: str) -> Path | None:
+    """Resolve a file path within workspace for download."""
+    target = _resolve_workspace_path(workspace, rel_path)
+    if target is None or not target.is_file():
+        return None
+    return target
+
+
+def save_to_workspace(workspace: Path, rel_dir: str, filename: str, content: bytes) -> dict[str, Any]:
+    """Save uploaded file to a specific directory in the workspace."""
+    workspace = workspace.resolve()
+    target_dir = _resolve_workspace_path(workspace, rel_dir)
+    if target_dir is None:
+        raise ValueError("Invalid directory path")
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = (target_dir / filename).resolve()
+    try:
+        file_path.relative_to(workspace)
+    except ValueError:
+        raise ValueError("Invalid filename")
+
+    file_path.write_bytes(content)
+    stat = file_path.stat()
+    ct, _ = mimetypes.guess_type(filename)
+    return {
+        "name": filename,
+        "path": str(file_path.relative_to(workspace)),
+        "type": "file",
+        "size": stat.st_size,
+        "content_type": ct or "application/octet-stream",
+        "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+    }
+
+
+def delete_workspace_path(workspace: Path, rel_path: str) -> bool:
+    """Delete a file or directory from the workspace."""
+    target = _resolve_workspace_path(workspace, rel_path)
+    if target is None or not target.exists():
+        return False
+    # Don't allow deleting the workspace root
+    if target == workspace.resolve():
+        return False
+    if target.is_dir():
+        shutil.rmtree(target)
+    else:
+        target.unlink()
+    return True
+
+
+def create_workspace_dir(workspace: Path, rel_path: str) -> dict[str, Any]:
+    """Create a directory in the workspace."""
+    workspace = workspace.resolve()
+    target = _resolve_workspace_path(workspace, rel_path)
+    if target is None:
+        raise ValueError("Invalid directory path")
+    target.mkdir(parents=True, exist_ok=True)
+    return {
+        "name": target.name,
+        "path": str(target.relative_to(workspace)),
+        "type": "directory",
+    }
