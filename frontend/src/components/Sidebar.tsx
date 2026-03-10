@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { getMe } from '../lib/api'
+import { getMe, listAgents } from '../lib/api'
 import type { AuthUser } from '../lib/api'
 import {
   LayoutDashboard,
@@ -11,6 +11,7 @@ import {
   FolderOpen,
   MessageSquare,
   Clock,
+  Monitor,
   Settings,
   User,
 } from 'lucide-react'
@@ -25,7 +26,8 @@ const navSections = [
   {
     label: 'Agents',
     items: [
-      { to: '/agents', icon: Bot, label: 'Agents', badge: 6 },
+      { to: '/agents', icon: Bot, label: 'Agents', badgeKey: 'agents' },
+      { to: '/chat', icon: MessageSquare, label: '会话' },
     ],
   },
   {
@@ -42,6 +44,7 @@ const navSections = [
     items: [
       { to: '/sessions', icon: MessageSquare, label: '会话历史' },
       { to: '/cron', icon: Clock, label: '定时任务' },
+      { to: '/nodes', icon: Monitor, label: 'Node 管理' },
       { to: '/settings', icon: Settings, label: '系统设置' },
     ],
   },
@@ -50,9 +53,11 @@ const navSections = [
 export default function Sidebar() {
   const location = useLocation()
   const [user, setUser] = useState<AuthUser | null>(null)
+  const [agentCount, setAgentCount] = useState<number>(0)
 
   useEffect(() => {
     getMe().then(setUser).catch(() => {})
+    listAgents().then(r => setAgentCount(r.agents?.length ?? 0)).catch(() => {})
   }, [])
 
   return (
@@ -79,20 +84,6 @@ export default function Sidebar() {
               const Icon = item.icon
               const isActive = location.pathname === item.to ||
                 (item.to !== '/dashboard' && location.pathname.startsWith(item.to))
-              const isDisabled = item.to === '/settings'
-
-              if (isDisabled) {
-                return (
-                  <div
-                    key={item.to}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-dark-text-secondary/50 cursor-not-allowed"
-                  >
-                    <Icon size={18} />
-                    <span>{item.label}</span>
-                  </div>
-                )
-              }
-
               return (
                 <NavLink
                   key={item.to}
@@ -105,9 +96,9 @@ export default function Sidebar() {
                 >
                   <Icon size={18} />
                   <span>{item.label}</span>
-                  {'badge' in item && item.badge && (
-                    <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-accent-red text-xs text-white">
-                      {item.badge}
+                  {'badgeKey' in item && item.badgeKey === 'agents' && agentCount > 0 && (
+                    <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent-blue/20 px-1 text-xs text-accent-blue">
+                      {agentCount}
                     </span>
                   )}
                 </NavLink>

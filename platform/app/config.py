@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     dashscope_api_key: str = ""
     aihubmix_api_key: str = ""
     moonshot_api_key: str = ""
+    kimi_api_key: str = ""
     zhipu_api_key: str = ""
 
     # Self-hosted vLLM / OpenAI-compatible local model

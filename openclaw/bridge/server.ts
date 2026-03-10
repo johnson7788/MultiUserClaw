@@ -15,6 +15,8 @@ import { agentsRoutes } from "./routes/agents.js";
 import { marketplacesRoutes } from "./routes/marketplaces.js";
 import { filemanagerRoutes } from "./routes/filemanager.js";
 import { channelsRoutes } from "./routes/channels.js";
+import { settingsRoutes } from "./routes/settings.js";
+import { nodesRoutes } from "./routes/nodes.js";
 
 export function createServer(client: BridgeGatewayClient, config: BridgeConfig): http.Server {
   const app = express();
@@ -27,7 +29,7 @@ export function createServer(client: BridgeGatewayClient, config: BridgeConfig):
   app.use("/api", statusRoutes(client, config));
   app.use("/api", filesRoutes(config));
   app.use("/api", workspaceRoutes(config));
-  app.use("/api", skillsRoutes(config));
+  app.use("/api", skillsRoutes(config, client));
   app.use("/api", commandsRoutes(config));
   app.use("/api", pluginsRoutes(config));
   app.use("/api", cronRoutes(client));
@@ -35,6 +37,8 @@ export function createServer(client: BridgeGatewayClient, config: BridgeConfig):
   app.use("/api", marketplacesRoutes(config));
   app.use("/api", filemanagerRoutes(config));
   app.use("/api", channelsRoutes(client, config));
+  app.use("/api", settingsRoutes(config));
+  app.use("/api", nodesRoutes(client));
 
   // Error handler
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

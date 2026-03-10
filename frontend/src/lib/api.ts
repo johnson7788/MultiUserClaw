@@ -80,6 +80,7 @@ export interface Skill {
   name: string
   description: string
   source?: string
+  disabled?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -320,12 +321,43 @@ export async function sendChatMessage(
   )
 }
 
+export async function uploadFileToWorkspace(
+  file: File,
+  targetDir = 'workspace/uploads',
+): Promise<{ name: string; path: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('path', targetDir)
+
+  const token = getAccessToken()
+  const headers: Record<string, string> = {}
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${API_URL}/api/openclaw/filemanager/upload`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Upload failed')
+  }
+  return res.json()
+}
+
 // ---------------------------------------------------------------------------
 // Other
 // ---------------------------------------------------------------------------
 
 export async function listSkills(): Promise<Skill[]> {
   return fetchJSON<Skill[]>('/api/openclaw/skills')
+}
+
+export async function toggleSkill(name: string, enabled: boolean): Promise<void> {
+  await fetchJSON(`/api/openclaw/skills/${encodeURIComponent(name)}/toggle`, {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
+  })
 }
 
 export async function getStatus(): Promise<Record<string, unknown>> {

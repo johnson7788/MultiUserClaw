@@ -9,8 +9,11 @@ import SkillStore from './pages/SkillStore'
 import Channels from './pages/Channels'
 import AIModels from './pages/AIModels'
 import Sessions from './pages/Sessions'
+import Chat from './pages/Chat'
 import CronJobs from './pages/CronJobs'
 import FileManager from './pages/FileManager'
+import SystemSettings from './pages/SystemSettings'
+import Nodes from './pages/Nodes'
 import { isLoggedIn } from './lib/api'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -28,12 +31,15 @@ export default function App() {
         <Route path="agents" element={<Agents />} />
         <Route path="agents/create" element={<AgentCreate />} />
         <Route path="agents/:id" element={<AgentDetail />} />
+        <Route path="chat" element={<Chat />} />
         <Route path="skills" element={<SkillStore />} />
         <Route path="channels" element={<Channels />} />
         <Route path="models" element={<AIModels />} />
         <Route path="files" element={<FileManager />} />
         <Route path="sessions" element={<Sessions />} />
         <Route path="cron" element={<CronJobs />} />
+        <Route path="nodes" element={<Nodes />} />
+        <Route path="settings" element={<SystemSettings />} />
       </Route>
     </Routes>
   )

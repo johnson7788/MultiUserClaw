@@ -5,6 +5,7 @@ import multer from "multer";
 import archiver from "archiver";
 import unzipper from "unzipper";
 import type { BridgeConfig } from "../config.js";
+import type { BridgeGatewayClient } from "../gateway-client.js";
 import { asyncHandler } from "../utils.js";
 
 interface SkillInfo {
@@ -12,6 +13,7 @@ interface SkillInfo {
   description: string;
   source: string;
   available: boolean;
+  disabled: boolean;
   path: string;
 }
 
@@ -65,6 +67,7 @@ function scanSkillsDir(dir: string, source: string): SkillInfo[] {
       description,
       source,
       available: true,
+      disabled: false,
       path: skillMdPath,
     });
   }
@@ -72,7 +75,7 @@ function scanSkillsDir(dir: string, source: string): SkillInfo[] {
   return skills;
 }
 
-export function skillsRoutes(config: BridgeConfig): Router {
+export function skillsRoutes(config: BridgeConfig, client: BridgeGatewayClient): Router {
   const router = Router();
   const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -92,7 +95,36 @@ export function skillsRoutes(config: BridgeConfig): Router {
     for (const s of global) skillMap.set(s.name, s);
     for (const s of workspace) skillMap.set(s.name, s);
 
+    // Merge disabled state from gateway skills.status
+    try {
+      const statusReport = await client.request<{ skills?: Array<{ name?: string; skillKey?: string; disabled?: boolean }> }>("skills.status", {});
+      const statusSkills = statusReport?.skills || [];
+      for (const ss of statusSkills) {
+        const key = ss.name || ss.skillKey || "";
+        const existing = skillMap.get(key);
+        if (existing && ss.disabled) {
+          existing.disabled = true;
+        }
+      }
+    } catch {
+      // Gateway may not support skills.status — just return without disabled info
+    }
+
     res.json(Array.from(skillMap.values()));
+  }));
+
+  // PUT /api/skills/:name/toggle — enable or disable a skill
+  router.put("/skills/:name/toggle", asyncHandler(async (req, res) => {
+    const { enabled } = req.body as { enabled: boolean };
+    try {
+      await client.request("skills.update", {
+        skillKey: req.params.name,
+        enabled,
+      });
+      res.json({ ok: true, name: req.params.name, enabled });
+    } catch (err) {
+      res.status(500).json({ detail: (err as Error).message });
+    }
   }));
 
   // DELETE /api/skills/:name

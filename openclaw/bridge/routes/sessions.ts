@@ -91,7 +91,7 @@ export function sessionsRoutes(client: BridgeGatewayClient): Router {
   // POST /api/sessions/:key/messages — send a chat message
   router.post("/sessions/:key(*)/messages", asyncHandler(async (req, res) => {
     const key = toOpenclawSessionKey(req.params.key);
-    const { message, agentId } = req.body;
+    const { message } = req.body;
 
     if (!message || typeof message !== "string") {
       res.status(400).json({ detail: "message is required" });

@@ -8,6 +8,18 @@ import { asyncHandler, sanitizePath } from "../utils.js";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
+/**
+ * Fix multer's latin1-encoded originalname for non-ASCII filenames (e.g. Chinese).
+ * Browsers send UTF-8 filenames, but multer decodes them as latin1 by default.
+ */
+function fixOriginalName(raw: string): string {
+  try {
+    return Buffer.from(raw, "latin1").toString("utf8");
+  } catch {
+    return raw;
+  }
+}
+
 export function filemanagerRoutes(config: BridgeConfig): Router {
   const router = Router();
   const upload = multer({ limits: { fileSize: MAX_FILE_SIZE } });
@@ -133,6 +145,8 @@ export function filemanagerRoutes(config: BridgeConfig): Router {
       return;
     }
 
+    const fileName = fixOriginalName(file.originalname);
+
     const targetDir = (req.body.path as string) || "";
     const absDirPath = targetDir ? sanitizePath(targetDir, rootDir) : rootDir;
     if (!absDirPath) {
@@ -140,18 +154,18 @@ export function filemanagerRoutes(config: BridgeConfig): Router {
       return;
     }
 
-    if (file.originalname.includes("/") || file.originalname.includes("\\")) {
+    if (fileName.includes("/") || fileName.includes("\\")) {
       res.status(400).json({ detail: "Invalid filename" });
       return;
     }
 
     fs.mkdirSync(absDirPath, { recursive: true });
-    const filePath = path.join(absDirPath, file.originalname);
+    const filePath = path.join(absDirPath, fileName);
     fs.writeFileSync(filePath, file.buffer);
     const stat = fs.statSync(filePath);
 
     res.json({
-      name: file.originalname,
+      name: fileName,
       path: path.relative(rootDir, filePath),
       type: "file",
       size: stat.size,

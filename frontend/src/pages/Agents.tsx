@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bot, Plus, Search, Loader2, MessageSquare } from 'lucide-react'
+import { Bot, Plus, Search, Loader2 } from 'lucide-react'
 import { fetchAgents, removeAgent } from '../store/agents'
 import type { BackendAgent } from '../types/agent'
-import { useChat } from '../components/Layout'
 
 export default function Agents() {
   const navigate = useNavigate()
-  const { openChat } = useChat()
   const [agents, setAgents] = useState<BackendAgent[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -90,20 +88,6 @@ export default function Agents() {
             </div>
 
             <div className="mt-4 flex items-center justify-end gap-3">
-              <button
-                onClick={e => {
-                  e.stopPropagation()
-                  openChat({
-                    agentId: agent.id,
-                    agentName: agent.name || agent.identity?.name || agent.id,
-                    agentEmoji: agent.identity?.emoji,
-                  })
-                }}
-                className="flex items-center gap-1 text-xs text-accent-blue/70 hover:text-accent-blue"
-              >
-                <MessageSquare size={13} />
-                对话
-              </button>
               <button
                 onClick={e => handleDelete(e, agent)}
                 className="text-xs text-accent-red/70 hover:text-accent-red"

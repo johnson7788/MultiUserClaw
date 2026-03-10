@@ -38,6 +38,7 @@ _MODEL_PROVIDER_MAP: dict[str, tuple[str, str]] = {
 _CUSTOM_BASE_PROVIDERS: dict[str, tuple[str, str]] = {
     # keyword → (api_base, settings attr for api key)
     "qwen": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "dashscope_api_key"),
+    "kimi": ("https://api.moonshot.cn/v1", "kimi_api_key"),
     "aihubmix": ("https://aihubmix.com/v1", "aihubmix_api_key"),
 }
 

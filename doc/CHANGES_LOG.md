@@ -132,3 +132,14 @@
 
 openclaw/Dockerfile.bridge 已经包含了完整的 openclaw 主程序（COPY . . + pnpm build），不是只有
   bridge
+
+
+  Chat 页面
+
+  - 输入框左侧新增 📎 附件按钮，支持选择多个文件
+  - 支持粘贴图片（Ctrl+V / Cmd+V）
+  - 文件预览区：图片显示缩略图，文件显示名称和大小，可单独删除
+  - 发送逻辑：
+    - 图片（image/*）→ base64 编码作为 attachment 直接发给网关
+    - 其他文件（PDF/文档等）→ 先上传到 workspace/uploads/ 目录，然后在消息中插入 [附件: workspace/uploads/xxx.pdf] 引用路径，Agent
+  可通过文件系统工具读取处理

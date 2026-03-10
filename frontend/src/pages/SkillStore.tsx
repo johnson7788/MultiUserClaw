@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { listSkills, searchSkills, installSkill } from '../lib/api'
+import { listSkills, searchSkills, installSkill, toggleSkill } from '../lib/api'
 import type { Skill, SkillSearchResult } from '../lib/api'
 import { Zap, Loader2, Search, Download, ExternalLink, Check } from 'lucide-react'
 
@@ -17,6 +17,13 @@ export default function SkillStore() {
   const [installing, setInstalling] = useState<string | null>(null)
   const [installed, setInstalled] = useState<Set<string>>(new Set())
   const [installError, setInstallError] = useState('')
+
+  // Toggle state
+  const [toggling, setToggling] = useState<string | null>(null)
+
+  const refreshSkills = () => {
+    listSkills().then(setSkills).catch(() => setSkills([]))
+  }
 
   useEffect(() => {
     listSkills()
@@ -48,12 +55,31 @@ export default function SkillStore() {
     try {
       await installSkill(slug)
       setInstalled(prev => new Set(prev).add(slug))
-      // Refresh installed skills
-      listSkills().then(setSkills).catch(() => {})
+      refreshSkills()
     } catch (err: any) {
       setInstallError(err?.message || '安装失败')
     } finally {
       setInstalling(null)
+    }
+  }
+
+  const handleToggle = async (skill: Skill) => {
+    if (toggling) return
+    const newEnabled = skill.disabled !== false // if disabled or undefined, enable it
+    setToggling(skill.name)
+    try {
+      await toggleSkill(skill.name, newEnabled)
+      // Update local state immediately
+      setSkills(prev =>
+        prev.map(s =>
+          s.name === skill.name ? { ...s, disabled: !newEnabled } : s
+        )
+      )
+    } catch {
+      // Revert on error — refresh from server
+      refreshSkills()
+    } finally {
+      setToggling(null)
     }
   }
 
@@ -173,20 +199,53 @@ export default function SkillStore() {
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-4">
-            {skills.map(skill => (
-              <div key={skill.name} className="rounded-xl border border-dark-border bg-dark-card p-5 hover:border-accent-blue/30 transition-colors">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-yellow/10">
-                  <Zap size={20} className="text-accent-yellow" />
-                </div>
-                <h3 className="mt-3 text-sm font-semibold text-dark-text">{skill.name}</h3>
-                <p className="mt-1 text-xs text-dark-text-secondary leading-relaxed line-clamp-2">{skill.description}</p>
-                {skill.source && (
-                  <div className="mt-3 text-xs text-dark-text-secondary">
-                    来源: {skill.source}
+            {skills.map(skill => {
+              const isDisabled = skill.disabled === true
+              const isToggling = toggling === skill.name
+              return (
+                <div
+                  key={skill.name}
+                  className={`rounded-xl border bg-dark-card p-5 transition-colors ${
+                    isDisabled
+                      ? 'border-dark-border/50 opacity-60'
+                      : 'border-dark-border hover:border-accent-blue/30'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-yellow/10">
+                      <Zap size={20} className={isDisabled ? 'text-dark-text-secondary' : 'text-accent-yellow'} />
+                    </div>
+                    {/* Toggle switch */}
+                    <button
+                      onClick={() => handleToggle(skill)}
+                      disabled={isToggling}
+                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                        isDisabled ? 'bg-dark-border' : 'bg-accent-green'
+                      } ${isToggling ? 'opacity-50' : 'cursor-pointer'}`}
+                      title={isDisabled ? '点击启用' : '点击禁用'}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                          isDisabled ? 'translate-x-0.5' : 'translate-x-[18px]'
+                        }`}
+                      />
+                    </button>
                   </div>
-                )}
-              </div>
-            ))}
+                  <h3 className="mt-3 text-sm font-semibold text-dark-text">{skill.name}</h3>
+                  <p className="mt-1 text-xs text-dark-text-secondary leading-relaxed line-clamp-2">{skill.description}</p>
+                  <div className="mt-3 flex items-center justify-between">
+                    {skill.source && (
+                      <span className="text-xs text-dark-text-secondary">
+                        来源: {skill.source}
+                      </span>
+                    )}
+                    {isDisabled && (
+                      <span className="text-xs text-accent-yellow">已禁用</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
