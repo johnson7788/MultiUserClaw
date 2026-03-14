@@ -21,25 +21,161 @@ interface CronJob {
   created_at_ms: number;
 }
 
+type LegacyCreateBody = {
+  name?: unknown;
+  message?: unknown;
+  every_seconds?: unknown;
+  cron_expr?: unknown;
+  at_iso?: unknown;
+  deliver?: unknown;
+  channel?: unknown;
+  to?: unknown;
+  schedule?: unknown;
+  payload?: unknown;
+  sessionTarget?: unknown;
+  wakeMode?: unknown;
+  delivery?: unknown;
+};
+
+function formatScheduleDisplay(scheduleKind: string, scheduleExpr: string | null, scheduleEveryMs: number | null): string {
+  if (scheduleKind === "every" && typeof scheduleEveryMs === "number" && scheduleEveryMs > 0) {
+    const seconds = Math.floor(scheduleEveryMs / 1000);
+    if (seconds % 3600 === 0) return `every ${seconds / 3600} hour(s)`;
+    if (seconds % 60 === 0) return `every ${seconds / 60} minute(s)`;
+    return `every ${seconds} second(s)`;
+  }
+  if (scheduleKind === "cron" && scheduleExpr) return scheduleExpr;
+  if (scheduleKind === "at" && scheduleExpr) return scheduleExpr;
+  return "";
+}
+
 function serializeJob(job: Record<string, unknown>): CronJob {
+  const schedule = (job.schedule && typeof job.schedule === "object")
+    ? (job.schedule as Record<string, unknown>)
+    : null;
+  const state = (job.state && typeof job.state === "object")
+    ? (job.state as Record<string, unknown>)
+    : null;
+  const payload = (job.payload && typeof job.payload === "object")
+    ? (job.payload as Record<string, unknown>)
+    : null;
+
+  const scheduleKind =
+    (schedule?.kind as string) ||
+    (job.scheduleKind as string) ||
+    (job.schedule_kind as string) ||
+    "every";
+
+  const scheduleExpr =
+    (schedule?.expr as string) ||
+    (schedule?.at as string) ||
+    (job.scheduleExpr as string) ||
+    (job.schedule_expr as string) ||
+    null;
+
+  const scheduleEveryMs =
+    (schedule?.everyMs as number) ||
+    (job.scheduleEveryMs as number) ||
+    (job.schedule_every_ms as number) ||
+    null;
+
   return {
     id: (job.id as string) || "",
     name: (job.name as string) || "",
     enabled: (job.enabled as boolean) ?? true,
-    schedule_kind: (job.scheduleKind as string) || (job.schedule_kind as string) || "every",
-    schedule_display: (job.scheduleDisplay as string) || (job.schedule_display as string) || "",
-    schedule_expr: (job.scheduleExpr as string) || (job.schedule_expr as string) || null,
-    schedule_every_ms: (job.scheduleEveryMs as number) || (job.schedule_every_ms as number) || null,
-    message: (job.message as string) || "",
+    schedule_kind: scheduleKind,
+    schedule_display:
+      (job.scheduleDisplay as string) ||
+      (job.schedule_display as string) ||
+      formatScheduleDisplay(scheduleKind, scheduleExpr, scheduleEveryMs),
+    schedule_expr: scheduleExpr,
+    schedule_every_ms: scheduleEveryMs,
+    message:
+      (payload?.message as string) ||
+      (payload?.text as string) ||
+      (job.message as string) ||
+      "",
     deliver: (job.deliver as boolean) ?? false,
     channel: (job.channel as string) || null,
     to: (job.to as string) || null,
-    next_run_at_ms: (job.nextRunAtMs as number) || (job.next_run_at_ms as number) || null,
-    last_run_at_ms: (job.lastRunAtMs as number) || (job.last_run_at_ms as number) || null,
-    last_status: (job.lastStatus as string) || (job.last_status as string) || null,
-    last_error: (job.lastError as string) || (job.last_error as string) || null,
+    next_run_at_ms:
+      (state?.nextRunAtMs as number) ||
+      (job.nextRunAtMs as number) ||
+      (job.next_run_at_ms as number) ||
+      null,
+    last_run_at_ms:
+      (state?.lastRunAtMs as number) ||
+      (job.lastRunAtMs as number) ||
+      (job.last_run_at_ms as number) ||
+      null,
+    last_status:
+      (state?.lastStatus as string) ||
+      (state?.lastRunStatus as string) ||
+      (job.lastStatus as string) ||
+      (job.last_status as string) ||
+      null,
+    last_error:
+      (state?.lastError as string) ||
+      (job.lastError as string) ||
+      (job.last_error as string) ||
+      null,
     created_at_ms: (job.createdAtMs as number) || (job.created_at_ms as number) || Date.now(),
   };
+}
+
+function toCronAddParams(body: LegacyCreateBody): Record<string, unknown> {
+  // If caller already sends new protocol params, pass through untouched.
+  if (body.schedule && body.payload) {
+    return {
+      name: body.name,
+      schedule: body.schedule,
+      payload: body.payload,
+      sessionTarget: body.sessionTarget ?? "isolated",
+      wakeMode: body.wakeMode ?? "now",
+      delivery: body.delivery,
+    };
+  }
+
+  let schedule: Record<string, unknown> | null = null;
+  if (typeof body.every_seconds === "number" && body.every_seconds > 0) {
+    schedule = { kind: "every", everyMs: Math.floor(body.every_seconds * 1000) };
+  } else if (typeof body.cron_expr === "string" && body.cron_expr.trim()) {
+    schedule = { kind: "cron", expr: body.cron_expr.trim() };
+  } else if (typeof body.at_iso === "string" && body.at_iso.trim()) {
+    schedule = { kind: "at", at: body.at_iso.trim() };
+  }
+
+  if (!schedule) {
+    throw new Error("Must specify every_seconds, cron_expr, or at_iso");
+  }
+
+  const message = typeof body.message === "string" ? body.message.trim() : "";
+  if (!message) {
+    throw new Error("message is required");
+  }
+
+  const addParams: Record<string, unknown> = {
+    name: typeof body.name === "string" ? body.name : "Untitled job",
+    schedule,
+    sessionTarget: "isolated",
+    wakeMode: "now",
+    payload: {
+      kind: "agentTurn",
+      message,
+    },
+  };
+
+  if (body.deliver === true) {
+    addParams.delivery = {
+      mode: "announce",
+      channel: typeof body.channel === "string" && body.channel.trim() ? body.channel.trim() : undefined,
+      to: typeof body.to === "string" && body.to.trim() ? body.to.trim() : undefined,
+    };
+  } else {
+    addParams.delivery = { mode: "none" };
+  }
+
+  return addParams;
 }
 
 export function cronRoutes(client: BridgeGatewayClient): Router {
@@ -68,33 +204,24 @@ export function cronRoutes(client: BridgeGatewayClient): Router {
 
   // POST /api/cron/jobs
   router.post("/cron/jobs", asyncHandler(async (req, res) => {
-    const { name, message, every_seconds, cron_expr, at_iso, deliver, channel, to } = req.body;
-
-    if (!every_seconds && !cron_expr && !at_iso) {
-      res.status(400).json({ detail: "Must specify every_seconds, cron_expr, or at_iso" });
-      return;
-    }
-
     try {
-      const params: Record<string, unknown> = { name, message };
-      if (every_seconds) params.everySeconds = every_seconds;
-      if (cron_expr) params.cronExpr = cron_expr;
-      if (at_iso) params.atIso = at_iso;
-      if (deliver !== undefined) params.deliver = deliver;
-      if (channel) params.channel = channel;
-      if (to) params.to = to;
-
-      const job = await client.request<Record<string, unknown>>("cron.create", params);
+      const params = toCronAddParams(req.body as LegacyCreateBody);
+      const job = await client.request<Record<string, unknown>>("cron.add", params);
       res.json(serializeJob(job));
     } catch (err) {
-      res.status(500).json({ detail: (err as Error).message });
+      const msg = (err as Error).message;
+      if (msg.includes("Must specify") || msg.includes("required")) {
+        res.status(400).json({ detail: msg });
+      } else {
+        res.status(500).json({ detail: msg });
+      }
     }
   }));
 
   // DELETE /api/cron/jobs/:job_id
   router.delete("/cron/jobs/:job_id", asyncHandler(async (req, res) => {
     try {
-      await client.request("cron.delete", { id: req.params.job_id });
+      await client.request("cron.remove", { id: req.params.job_id });
       res.json({ ok: true });
     } catch (err) {
       const msg = (err as Error).message;
@@ -111,9 +238,9 @@ export function cronRoutes(client: BridgeGatewayClient): Router {
     const { enabled } = req.body;
 
     try {
-      const job = await client.request<Record<string, unknown>>("cron.toggle", {
+      const job = await client.request<Record<string, unknown>>("cron.update", {
         id: req.params.job_id,
-        enabled,
+        patch: { enabled: Boolean(enabled) },
       });
       res.json(serializeJob(job));
     } catch (err) {

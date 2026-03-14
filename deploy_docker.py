@@ -11,6 +11,9 @@
   # 指定服务器 IP（会自动设置 VITE_API_URL）
   python deploy_docker.py --host 192.168.1.160
 
+  # 反向代理场景：前端使用相对路径（如 /api/...）
+  python deploy_docker.py --host 117.133.60.219 --relative-api
+
   # 使用 prod compose 文件
   python deploy_docker.py --host 117.133.60.219 --compose docker-compose.yml.prod
 
@@ -47,6 +50,17 @@ BOLD = "\033[1m"
 RESET = "\033[0m"
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def resolve_vite_api_url(host: str, gateway_port: int, relative_api: bool) -> str:
+    """Resolve frontend API base URL for build args.
+
+    - relative_api=True  -> ""  (frontend uses relative path, e.g. /api/auth/login)
+    - relative_api=False -> "http://{host}:{gateway_port}"
+    """
+    if relative_api:
+        return ""
+    return f"http://{host}:{gateway_port}"
 
 
 def log(msg: str, color: str = CYAN):
@@ -315,6 +329,11 @@ def main():
     parser.add_argument("--compose", default="docker-compose.yml", help="compose 文件 (默认: docker-compose.yml)")
     parser.add_argument("--gateway-port", type=int, default=None, help="Gateway 端口 (默认: 从 compose 文件读取)")
     parser.add_argument("--frontend-port", type=int, default=3080, help="Frontend 端口 (默认: 3080)")
+    parser.add_argument(
+        "--relative-api",
+        action="store_true",
+        help="前端使用相对 API 路径（VITE_API_URL 为空，适合反向代理/SSL 场景）",
+    )
     parser.add_argument("--build-only", action="store_true", help="仅构建镜像，不启动服务")
     parser.add_argument("--restart", action="store_true", help="仅重启服务")
     parser.add_argument("--rebuild", metavar="SERVICES", help="重建指定服务，逗号分隔 (openclaw,gateway,frontend)")
@@ -383,9 +402,9 @@ def main():
 
         # 设置 VITE_API_URL（frontend 构建需要）
         if args.host and args.gateway_port:
-            api_url = f"http://{args.host}:{args.gateway_port}"
+            api_url = resolve_vite_api_url(args.host, args.gateway_port, args.relative_api)
             os.environ["VITE_API_URL"] = api_url
-            log(f"VITE_API_URL = {api_url}")
+            log("VITE_API_URL = <relative path>" if args.relative_api else f"VITE_API_URL = {api_url}")
 
         # 重建 compose 服务
         if services:
@@ -405,9 +424,9 @@ def main():
     sync_deploy_copy_to_bridge()
 
     # 设置 VITE_API_URL（frontend 构建需要）
-    api_url = f"http://{args.host}:{args.gateway_port}"
+    api_url = resolve_vite_api_url(args.host, args.gateway_port, args.relative_api)
     os.environ["VITE_API_URL"] = api_url
-    log(f"VITE_API_URL = {api_url}")
+    log("VITE_API_URL = <relative path>" if args.relative_api else f"VITE_API_URL = {api_url}")
 
     compose_args = f"-f {args.compose}"
 

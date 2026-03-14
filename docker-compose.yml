@@ -58,6 +58,7 @@ services:
       PLATFORM_DEFAULT_MODEL: ${DEFAULT_MODEL:-dashscope/qwen3-coder-plus}
       PLATFORM_OPENCLAW_IMAGE: openclaw:latest
       PLATFORM_CONTAINER_NETWORK: openclaw-internal
+      PLATFORM_CONTAINER_TZ: ${CONTAINER_TZ:-Asia/Shanghai}
       PLATFORM_CONTAINER_DATA_DIR: /data/openclaw-users
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock  # Docker API access for container management

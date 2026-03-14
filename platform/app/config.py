@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # Docker
     openclaw_image: str = "openclaw:latest"
     container_network: str = "openclaw-internal"
+    container_tz: str = "Asia/Shanghai"
     # 🟢 提升资源限制（适合浏览器/agent）
     container_memory_limit: str = "2g"  # 原来 512m
     container_cpu_limit: float = 4.0  # 原来 1.0
