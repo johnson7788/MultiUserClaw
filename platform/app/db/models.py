@@ -52,6 +52,22 @@ class Container(Base):
     last_active_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class UserPortBinding(Base):
+    """Per-user persisted host port preferences for recreated containers."""
+
+    __tablename__ = "user_port_bindings"
+
+    user_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    host_bind_ip: Mapped[str] = mapped_column(String(64), nullable=False, default="0.0.0.0")
+    host_port_browser: Mapped[int] = mapped_column(Integer, nullable=True, unique=True)
+    host_port_service: Mapped[int] = mapped_column(Integer, nullable=True, unique=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class UsageRecord(Base):
     """LLM token usage per request."""
 

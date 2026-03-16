@@ -9,13 +9,13 @@ import time
 from pathlib import Path
 
 import docker
-from docker.errors import NotFound as DockerNotFound
+from docker.errors import APIError as DockerAPIError, NotFound as DockerNotFound
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db.models import Container
+from app.db.models import Container, UserPortBinding
 
 _client: docker.DockerClient | None = None
 
@@ -49,6 +49,18 @@ def _published_binding(container: docker.models.containers.Container, container_
     host_ip = bindings[0].get("HostIp", "") or ""
     host_port = bindings[0].get("HostPort", "") or ""
     return host_ip, host_port
+
+
+def _is_host_port_in_use(client: docker.DockerClient, host_port: int) -> bool:
+    """Return True if any container currently publishes the given host port."""
+    port_str = str(host_port)
+    for c in client.containers.list(all=True):
+        ports = c.attrs.get("NetworkSettings", {}).get("Ports", {}) or {}
+        for bindings in ports.values():
+            for binding in (bindings or []):
+                if (binding.get("HostPort") or "") == port_str:
+                    return True
+    return False
 
 
 def _build_expose_port_skill_markdown(
@@ -143,6 +155,38 @@ async def get_container_by_token(db: AsyncSession, token: str) -> Container | No
     return result.scalar_one_or_none()
 
 
+async def get_user_port_binding(db: AsyncSession, user_id: str) -> UserPortBinding | None:
+    result = await db.execute(select(UserPortBinding).where(UserPortBinding.user_id == user_id))
+    return result.scalar_one_or_none()
+
+
+async def upsert_user_port_binding(
+    db: AsyncSession,
+    user_id: str,
+    host_bind_ip: str,
+    host_port_browser: int | None,
+    host_port_service: int | None,
+) -> None:
+    stmt = (
+        pg_insert(UserPortBinding)
+        .values(
+            user_id=user_id,
+            host_bind_ip=host_bind_ip,
+            host_port_browser=host_port_browser,
+            host_port_service=host_port_service,
+        )
+        .on_conflict_do_update(
+            index_elements=[UserPortBinding.__table__.c.user_id],
+            set_={
+                "host_bind_ip": host_bind_ip,
+                "host_port_browser": host_port_browser,
+                "host_port_service": host_port_service,
+            },
+        )
+    )
+    await db.execute(stmt)
+
+
 async def create_container(db: AsyncSession, user_id: str) -> Container | None:
     """Create a Docker container for a user and record metadata in DB.
 
@@ -217,13 +261,42 @@ async def create_container(db: AsyncSession, user_id: str) -> Container | None:
     }
 
     if settings.user_container_publish_ports:
-        run_kwargs["ports"] = {
-            "5900/tcp": (settings.user_container_bind_ip, None),
-            "30000/tcp": (settings.user_container_bind_ip, None),
-        }
+        binding = await get_user_port_binding(db, user_id)
+        preferred_browser_port = binding.host_port_browser if binding is not None else None
+        preferred_service_port = binding.host_port_service if binding is not None else None
+
+        preferred_usable = (
+            preferred_browser_port is not None
+            and preferred_service_port is not None
+            and preferred_browser_port != preferred_service_port
+            and not _is_host_port_in_use(client, preferred_browser_port)
+            and not _is_host_port_in_use(client, preferred_service_port)
+        )
+
+        if preferred_usable:
+            run_kwargs["ports"] = {
+                "5900/tcp": (settings.user_container_bind_ip, preferred_browser_port),
+                "30000/tcp": (settings.user_container_bind_ip, preferred_service_port),
+            }
+        else:
+            run_kwargs["ports"] = {
+                "5900/tcp": (settings.user_container_bind_ip, None),
+                "30000/tcp": (settings.user_container_bind_ip, None),
+            }
 
     try:
         docker_container = client.containers.run(**run_kwargs)
+    except DockerAPIError as exc:
+        # Preferred ports can race with other creators; fallback to random publish.
+        if settings.user_container_publish_ports and "port is already allocated" in str(exc).lower():
+            run_kwargs["ports"] = {
+                "5900/tcp": (settings.user_container_bind_ip, None),
+                "30000/tcp": (settings.user_container_bind_ip, None),
+            }
+            docker_container = client.containers.run(**run_kwargs)
+        else:
+            await db.rollback()
+            raise
     except Exception:
         # Docker creation failed — remove the placeholder DB record
         await db.rollback()
@@ -247,6 +320,13 @@ async def create_container(db: AsyncSession, user_id: str) -> Container | None:
     record.docker_id = docker_container.id
     record.status = "running"
     record.internal_host = internal_ip
+    await upsert_user_port_binding(
+        db=db,
+        user_id=user_id,
+        host_bind_ip=browser_binding[0] or service_binding[0] or settings.user_container_bind_ip,
+        host_port_browser=int(browser_binding[1]) if browser_binding[1] else None,
+        host_port_service=int(service_binding[1]) if service_binding[1] else None,
+    )
     await db.commit()
     await db.refresh(record)
     return record
