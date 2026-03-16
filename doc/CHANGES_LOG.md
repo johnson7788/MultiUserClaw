@@ -1,3 +1,29 @@
+# 修改日志
+
+1. 添加skills页面,用于查看，删除，下载，上传skills
+                                                                                                                                 │
+│ ┌────────────────────────────────┬────────────────────────────────────────────────────┐                                                      │
+│ │              File              │                       Action                       │                                                      │
+│ ├────────────────────────────────┼────────────────────────────────────────────────────┤                                                      │
+│ │ nanobot/web/server.py          │ Add 3 skill API endpoints                          │                                                      │
+│ ├────────────────────────────────┼────────────────────────────────────────────────────┤                                                      │
+│ │ frontend/types/index.ts        │ Add Skill interface                                │                                                      │
+│ ├────────────────────────────────┼────────────────────────────────────────────────────┤                                                      │
+│ │ frontend/lib/api.ts            │ Add listSkills, deleteSkill, uploadSkill functions │                                                      │
+│ ├────────────────────────────────┼────────────────────────────────────────────────────┤                                                      │
+│ │ frontend/app/skills/page.tsx   │ New file — Skills management page                  │                                                      │
+│ ├────────────────────────────────┼────────────────────────────────────────────────────┤                                                      │
+│ │ frontend/components/Header.tsx │ Add Skills nav item                                │                                                      │
+│ └────────────────────────────────┴────────────────────────────────────────────────────┘
+
+
+2. 每个用户可以使用的token数量
+platform/app/config.py
+    # Quotas (tokens per day)
+    quota_free: int = 20000000
+    quota_basic: int = 1_000_000
+    quota_pro: int = 10_000_000%
+
 # 变更日志
 
 ## 2026-03-05: Nanobot → OpenClaw Bridge 替换
@@ -279,3 +305,87 @@ openclaw/Dockerfile.bridge 已经包含了完整的 openclaw 主程序（COPY . 
   3. 检查返回的 role，非 admin 提示无权限
   4. admin 用户 → 存 JWT 到 localStorage → 进入管理页面
   5. 每次 API 请求携带 Authorization: Bearer <token>
+
+
+
+  Gateway API 扩展 (platform/app/routes/admin.py):
+  - GET /api/admin/users — 新增分页、搜索、容器信息字段，优化 N+1 查询
+  - PUT /api/admin/users/{user_id}/password — 管理员重置密码
+  - GET /api/admin/usage/history — 按天/按模型的用量历史
+  - GET /api/admin/audit — 审计日志查询，支持分页和筛选
+
+  管理端前端 (manage_front/):
+  - /login — 登录页，校验 admin 角色
+  - /dashboard — 仪表盘，总用户数/活跃容器/今日用量
+  - /users — 用户管理，编辑角色/配额/状态，重置密码
+  - /containers — 容器管理，暂停/销毁操作
+  - /usage — 用量统计，折线图+柱状图
+  - /audit — 审计日志，按操作类型筛选
+  - API 代理路由（生产环境 Docker 部署）
+  - Dockerfile + docker-compose 服务
+
+  启动方式:
+  - 开发：cd manage_front && npm run dev -- -p 3001
+  - 生产：docker compose up manage-front
+
+
+  ---
+  修改的文件
+
+  ┌───────────────────────────────────┬──────────┬────────────────────────┐
+  │               文件                │   改动   │          作用          │
+  ├───────────────────────────────────┼──────────┼────────────────────────┤
+  │ platform/app/config.py            │ +2       │ 新增两个配置项         │
+  ├───────────────────────────────────┼──────────┼────────────────────────┤
+  │ platform/app/container/manager.py │ +139 -25 │ 核心逻辑               │
+  ├───────────────────────────────────┼──────────┼────────────────────────┤
+  │ openclaw/Dockerfile.bridge        │ +38 -3   │ 换国内镜像源（非核心） │
+  └───────────────────────────────────┴──────────┴────────────────────────┘
+
+  ---
+  端口自动分配机制详解
+
+  你关心的端口分配，关键在 manager.py 的 create_container() 中：
+
+  1. 配置开关
+
+  user_container_publish_ports: bool = True   # 是否暴露端口
+  user_container_bind_ip: str = "0.0.0.0"     # 绑定的 IP
+
+  2. 创建容器时声明端口映射
+
+  "ports": {
+      "5900/tcp": (bind_ip, None),    # 浏览器端口
+      "30000/tcp": (bind_ip, None),   # 服务端口
+  }
+
+  这里的关键是 None——它告诉 Docker：不指定宿主机端口，让 Docker 自动分配一个空闲端口。这等价于 docker run -p 0.0.0.0::5900 -p
+  0.0.0.0::30000。
+
+  所以如果你有 10 个用户容器，Docker 会自动给每个容器分配不同的宿主机端口（比如 32768、32769、32770...），避免端口冲突。
+
+  3. 容器启动后查询实际分配的端口
+
+  通过 _published_binding() 函数，从容器的 NetworkSettings.Ports 中读取 Docker 实际分配的宿主机端口号。
+
+  4. 把端口信息写回容器内部
+
+  通过 _build_expose_port_skill_markdown() 生成一个 Markdown 文件，记录：
+  - 容器内端口 5900 → 宿主机实际端口 X
+  - 容器内端口 30000 → 宿主机实际端口 Y
+
+  然后用 _write_expose_port_skill() 通过 Docker 的 put_archive API 把这个文件写入容器的
+  ~/.openclaw/workspace/skills/container-expose-info/SKILL.md。
+
+  为什么要写回去？ 这样容器内的 Agent 可以通过读取这个 skill
+  文件，知道自己的服务在宿主机上对应哪个端口，从而告知用户正确的访问地址。
+
+  ---
+  整体流程
+
+  创建容器 → Docker 自动分配宿主机端口 → 查询实际端口 → 生成端口说明文件 → 写入容器
+                                                                            ↓
+                                                                Agent 读取后告知用户:
+                                                                "你的浏览器在 host:32768"
+
+  简单说：用 None 让 Docker 自动选端口，解决多用户端口冲突问题；再把分配结果通知容器内的 Agent。

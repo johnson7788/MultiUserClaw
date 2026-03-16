@@ -83,6 +83,18 @@ services:
     depends_on:
       - gateway
 
+  manage-front:
+    container_name: openclaw-manage
+    build: ./manage_front
+    ports:
+      - "3001:3000"
+    environment:
+      - API_URL=http://gateway:8080
+    networks:
+      - openclaw-external
+    depends_on:
+      - gateway
+
 networks:
   openclaw-internal:
     name: openclaw-internal    # explicit name — prevents Compose project-name prefix
