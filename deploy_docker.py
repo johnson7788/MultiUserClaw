@@ -153,6 +153,20 @@ def check_env_file():
     else:
         warn(".env 中未找到有效的 API Key，请确认配置")
 
+    # Check admin account config
+    admin_user = ""
+    admin_pass = ""
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith("ADMIN_USERNAME=") and not line.endswith("="):
+            admin_user = line.split("=", 1)[1].strip().strip("'\"")
+        if line.startswith("ADMIN_PASSWORD=") and not line.endswith("="):
+            admin_pass = line.split("=", 1)[1].strip().strip("'\"")
+    if admin_user and admin_pass:
+        success(f"管理员账号已配置: {admin_user}")
+    else:
+        warn("未配置管理员账号 (ADMIN_USERNAME / ADMIN_PASSWORD)，管理后台将无法登录")
+
 
 
 def sync_deploy_copy_to_bridge():
@@ -311,6 +325,7 @@ def show_status(compose_file: str, host: str, gateway_port: int, frontend_port: 
     print(f"{BOLD}  OpenClaw 部署状态{RESET}")
     print(f"{'=' * 50}")
     print(f"  Frontend:  http://{host}:{frontend_port}")
+    print(f"  Manage:    http://{host}:3081")
     print(f"  Gateway:   http://{host}:{gateway_port}")
     print(f"  Compose:   {compose_file}")
     print(f"{'=' * 50}\n")

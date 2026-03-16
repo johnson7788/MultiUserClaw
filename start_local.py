@@ -74,6 +74,11 @@ SERVICES = {
         "port": 3080,
         "color": "\033[33m",  # yellow
     },
+    "manage": {
+        "name": "Manage Admin",
+        "port": 3081,
+        "color": "\033[32m",  # green
+    },
 }
 
 
@@ -371,7 +376,7 @@ def start_gateway(env: dict) -> "subprocess.Popen | None":
 
     # 从项目根目录 .env 读取配置并注入 PLATFORM_ 前缀
     # 需要转发的变量：所有 *_API_KEY、*_API_BASE、JWT_SECRET、DEFAULT_MODEL
-    _EXTRA_ENV_KEYS = {"JWT_SECRET", "DEFAULT_MODEL"}
+    _EXTRA_ENV_KEYS = {"JWT_SECRET", "DEFAULT_MODEL", "ADMIN_USERNAME", "ADMIN_PASSWORD"}
     env_path = os.path.join(PROJECT_DIR, ".env")
     if os.path.exists(env_path):
         with open(env_path) as f:
@@ -450,6 +455,38 @@ def start_frontend(frontend_host: str = "0.0.0.0", api_url: str = "http://127.0.
     return proc
 
 
+# ── Manage Admin Dev Server ──────────────────────────────────────────
+
+def start_manage(api_url: str = "http://127.0.0.1:8080") -> "subprocess.Popen | None":
+    log("启动 Manage Admin Dev Server (端口 3081)...")
+
+    if is_port_in_use(3081):
+        warn("端口 3081 已被占用，跳过 manage")
+        return None
+
+    manage_dir = os.path.join(PROJECT_DIR, "manage_front")
+    if not os.path.isdir(manage_dir):
+        warn("manage_front 目录不存在，跳过 manage")
+        return None
+
+    if not os.path.exists(os.path.join(manage_dir, "node_modules")):
+        log("安装管理端依赖...")
+        subprocess.run("npm install", cwd=manage_dir, shell=True, check=True)
+
+    dev_cmd = "npm run dev -- -p 3081"
+    proc = subprocess.Popen(
+        dev_cmd,
+        cwd=manage_dir,
+        env=_base_env(NEXT_PUBLIC_API_URL=api_url),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        shell=True,
+        **({"start_new_session": True} if not IS_WINDOWS else {}),
+    )
+    log(f"  PID: {proc.pid}")
+    return proc
+
+
 # ── 日志输出（跨平台：threading，不依赖 selectors/os.set_blocking）────
 
 def tail_output(procs: dict):
@@ -501,7 +538,7 @@ def stop_all():
 
 
 def _stop_all_unix():
-    patterns = ["bridge/start", "openclaw gateway", "uvicorn app.main:app", "vite.*3080"]
+    patterns = ["bridge/start", "openclaw gateway", "uvicorn app.main:app", "vite.*3080", "next.*3081"]
     for pattern in patterns:
         result = subprocess.run(
             f"pgrep -f '{pattern}'",
@@ -771,7 +808,7 @@ def main():
         return
 
     # 解析要启动的服务
-    all_services = ["db", "bridge", "gateway", "frontend"]
+    all_services = ["db", "bridge", "gateway", "frontend", "manage"]
     enabled = [s.strip() for s in args.only.split(",")] if args.only else list(all_services)
     if args.skip:
         skip = {s.strip() for s in args.skip.split(",")}
@@ -861,6 +898,12 @@ def main():
             proc = start_frontend(frontend_host=frontend_host, api_url=frontend_api_url)
             if proc:
                 processes["frontend"] = proc
+
+        # 5. Manage Admin
+        if "manage" in enabled:
+            proc = start_manage(api_url=frontend_api_url)
+            if proc:
+                processes["manage"] = proc
 
         if not processes:
             success("所有服务已就绪（使用已有实例）")

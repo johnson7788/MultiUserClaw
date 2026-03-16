@@ -55,6 +55,38 @@ async def _ensure_database() -> None:
         await conn.close()
 
 
+async def _ensure_admin_user() -> None:
+    """Create the default admin user if configured and not yet existing."""
+    if not settings.admin_username or not settings.admin_password:
+        return
+
+    from app.auth.service import get_user_by_username, hash_password
+    from app.db.engine import async_session
+    from app.db.models import User
+
+    async with async_session() as db:
+        existing = await get_user_by_username(db, settings.admin_username)
+        if existing:
+            # Ensure the user has admin role
+            if existing.role != "admin":
+                existing.role = "admin"
+                await db.commit()
+                logger.info("Updated user '%s' role to admin", settings.admin_username)
+            else:
+                logger.info("Admin user '%s' already exists", settings.admin_username)
+            return
+
+        user = User(
+            username=settings.admin_username,
+            email=f"{settings.admin_username}@localhost",
+            password_hash=hash_password(settings.admin_password),
+            role="admin",
+        )
+        db.add(user)
+        await db.commit()
+        logger.info("Created admin user '%s'", settings.admin_username)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log_settings_summary()
@@ -63,6 +95,7 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables verified")
+    await _ensure_admin_user()
     yield
     await engine.dispose()
 

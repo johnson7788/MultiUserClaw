@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     quota_basic: int = 1_000_000
     quota_pro: int = 10_000_000
 
+    # Admin account (auto-created on first startup)
+    admin_username: str = ""
+    admin_password: str = ""
+
     # Platform gateway
     host: str = "0.0.0.0"
     port: int = 8080
