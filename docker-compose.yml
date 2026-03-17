@@ -59,6 +59,8 @@ services:
       PLATFORM_OPENCLAW_IMAGE: openclaw:latest
       PLATFORM_CONTAINER_NETWORK: openclaw-internal
       PLATFORM_CONTAINER_TZ: ${CONTAINER_TZ:-Asia/Shanghai}
+      PLATFORM_CONTAINER_MEMORY_LIMIT: ${PLATFORM_CONTAINER_MEMORY_LIMIT:-2g}
+      PLATFORM_CONTAINER_SHM_SIZE: ${PLATFORM_CONTAINER_SHM_SIZE:-1g}
       PLATFORM_CONTAINER_DATA_DIR: /data/openclaw-users
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock  # Docker API access for container management

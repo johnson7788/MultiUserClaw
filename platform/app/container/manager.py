@@ -255,6 +255,7 @@ async def create_container(db: AsyncSession, user_id: str) -> Container | None:
         ],
         "network": settings.container_network,
         "mem_limit": settings.container_memory_limit,
+        "shm_size": settings.container_shm_size,
         "nano_cpus": int(settings.container_cpu_limit * 1e9),
         "pids_limit": settings.container_pids_limit,
         "restart_policy": {"Name": "unless-stopped"},
