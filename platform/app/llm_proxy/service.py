@@ -42,8 +42,8 @@ _PROVIDERS: list[dict] = [
     {
         "prefix": "openai",
         "key_attr": "openai_api_key",
-        "litellm_fmt": "{model}",
-        "api_base": None,
+        "litellm_fmt": "openai/{model}",
+        "api_base_attr": "openai_api_base",
         "keywords": ["gpt", "o1", "o3", "o4"],
     },
     {

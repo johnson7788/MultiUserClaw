@@ -14,6 +14,8 @@ from app.auth.service import (
     get_user_by_email,
     get_user_by_id,
     get_user_by_username,
+    hash_password,
+    verify_password,
 )
 from app.auth.dependencies import get_current_user
 from app.db.engine import get_db
@@ -133,3 +135,23 @@ async def generate_api_token(user: User = Depends(get_current_user)):
     """Generate a long-lived API token for programmatic access."""
     token = create_api_token(user.id, user.role)
     return ApiTokenResponse(api_token=token)
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@router.put("/change-password")
+async def change_password(
+    req: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not verify_password(req.old_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="旧密码不正确")
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="新密码至少需要6个字符")
+    user.password_hash = hash_password(req.new_password)
+    await db.commit()
+    return {"message": "密码修改成功"}

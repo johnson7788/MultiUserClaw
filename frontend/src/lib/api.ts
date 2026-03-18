@@ -228,6 +228,13 @@ export async function generateApiToken(): Promise<{ api_token: string; expires_i
   })
 }
 
+export async function changePassword(oldPassword: string, newPassword: string): Promise<{ message: string }> {
+  return fetchJSON<{ message: string }>('/api/auth/change-password', {
+    method: 'PUT',
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Agent functions
 // ---------------------------------------------------------------------------

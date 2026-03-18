@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # LLM Provider API Keys (platform-level, never exposed to containers)
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    openai_api_base: str = ""  # Custom OpenAI-compatible base URL
     deepseek_api_key: str = ""
     openrouter_api_key: str = ""
     dashscope_api_key: str = ""

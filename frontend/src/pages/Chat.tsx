@@ -13,6 +13,8 @@ import {
   Paperclip,
   X,
   FileText,
+  Copy,
+  Check,
 } from 'lucide-react'
 import MarkdownContent from '../components/MarkdownContent'
 import {
@@ -78,6 +80,7 @@ export default function Chat() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   // Typewriter streaming: targetText is the full text from SSE, displayedText is what's shown
   const [displayedText, setDisplayedText] = useState('')
   const targetTextRef = useRef('')
@@ -617,24 +620,38 @@ export default function Chat() {
                           <Bot size={14} />
                         </div>
                       )}
-                      <div
-                        className={`rounded-xl px-4 py-2.5 max-w-[80%] ${
-                          msg.role === 'user'
-                            ? 'bg-accent-blue text-white'
-                            : 'bg-dark-card border border-dark-border text-dark-text'
-                        }`}
-                      >
-                        {msg.role === 'user' ? (
-                          <div className="text-sm whitespace-pre-wrap break-words">{msg.content}</div>
-                        ) : (
-                          <MarkdownContent content={msg.content} />
-                        )}
-                        {msg.timestamp && (
-                          <div className={`text-[10px] mt-1 ${
-                            msg.role === 'user' ? 'text-white/60' : 'text-dark-text-secondary'
-                          }`}>
-                            {formatTime(msg.timestamp)}
-                          </div>
+                      <div className="flex flex-col items-start max-w-[80%]">
+                        <div
+                          className={`rounded-xl px-4 py-2.5 w-full ${
+                            msg.role === 'user'
+                              ? 'bg-accent-blue text-white'
+                              : 'bg-dark-card border border-dark-border text-dark-text'
+                          }`}
+                        >
+                          {msg.role === 'user' ? (
+                            <div className="text-sm whitespace-pre-wrap break-words">{msg.content}</div>
+                          ) : (
+                            <MarkdownContent content={msg.content} />
+                          )}
+                          {msg.timestamp && (
+                            <div className={`text-[10px] mt-1 ${
+                              msg.role === 'user' ? 'text-white/60' : 'text-dark-text-secondary'
+                            }`}>
+                              {formatTime(msg.timestamp)}
+                            </div>
+                          )}
+                        </div>
+                        {msg.role !== 'user' && (
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(msg.content)
+                              setCopiedIdx(i)
+                              setTimeout(() => setCopiedIdx(null), 2000)
+                            }}
+                            className="flex items-center gap-1 mt-1 px-2 py-0.5 text-[11px] text-dark-text-secondary hover:text-dark-text rounded transition-colors"
+                          >
+                            {copiedIdx === i ? <><Check size={12} /> 已复制</> : <><Copy size={12} /> 复制</>}
+                          </button>
                         )}
                       </div>
                       {msg.role === 'user' && (
