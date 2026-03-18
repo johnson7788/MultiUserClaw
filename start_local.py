@@ -379,7 +379,7 @@ def start_gateway(env: dict) -> "subprocess.Popen | None":
     _EXTRA_ENV_KEYS = {"JWT_SECRET", "DEFAULT_MODEL", "ADMIN_USERNAME", "ADMIN_PASSWORD"}
     env_path = os.path.join(PROJECT_DIR, ".env")
     if os.path.exists(env_path):
-        with open(env_path) as f:
+        with open(env_path, encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
@@ -855,7 +855,7 @@ def main():
     # Read .env and forward model config to bridge
     env_path = os.path.join(PROJECT_DIR, ".env")
     if os.path.exists(env_path):
-        with open(env_path) as f:
+        with open(env_path, encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:

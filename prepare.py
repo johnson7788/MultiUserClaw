@@ -323,8 +323,18 @@ def _which(cmd: str) -> str | None:
 
 def check_nodejs() -> CheckResult:
     """检查 Node.js (≥ 18) 和 npm 是否已安装。"""
-    node = _which("node")
-    npm  = _which("npm")
+    # 在 conda 环境根目录查找 node.exe / npm.cmd（Windows conda 安装场景）
+    conda_prefix = os.environ.get("CONDA_PREFIX", "")
+    if conda_prefix:
+        node_exe = Path(conda_prefix) / "node.exe"
+        npm_cmd  = Path(conda_prefix) / "npm.cmd"
+        if node_exe.exists() and npm_cmd.exists():
+            bin_dir = str(Path(conda_prefix))
+            if bin_dir not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+
+    node = _which("node") or shutil.which("node.exe")
+    npm  = _which("npm")  or shutil.which("npm.cmd")
 
     if not node or not npm:
         missing = []
@@ -335,7 +345,7 @@ def check_nodejs() -> CheckResult:
             f"{', '.join(missing)} 未找到。请安装 Node.js ≥ 18: https://nodejs.org，本地测试时会受影响",
         )
 
-    r = run("node", "--version")
+    r = subprocess.run([node, "--version"], capture_output=True, text=True, env=os.environ)
     ver = r.stdout.strip() if r.returncode == 0 else "unknown"
 
     # 解析主版本号
@@ -349,7 +359,7 @@ def check_nodejs() -> CheckResult:
     except ValueError:
         pass
 
-    r2 = run("npm", "--version")
+    r2 = subprocess.run([npm, "--version"], capture_output=True, text=True, env=os.environ)
     npm_ver = r2.stdout.strip() if r2.returncode == 0 else "unknown"
     return CheckResult(True, f"node {ver}, npm {npm_ver}")
 
