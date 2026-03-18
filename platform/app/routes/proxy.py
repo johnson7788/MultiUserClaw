@@ -404,3 +404,81 @@ async def proxy_websocket(
             await websocket.close()
         except Exception:
             pass
+
+
+@router.websocket("/terminal/ws")
+async def proxy_terminal_websocket(
+    websocket: WebSocket,
+    token: str = "",
+):
+    """Forward WebSocket terminal stream to per-user bridge terminal endpoint."""
+    from app.auth.service import decode_token, get_user_by_id
+
+    async with async_session() as db:
+        payload = decode_token(token)
+        if payload is None or payload.get("type") != "access":
+            await websocket.close(code=4001, reason="Invalid token")
+            return
+
+        user = await get_user_by_id(db, payload["sub"])
+        if user is None or not user.is_active:
+            await websocket.close(code=4001, reason="User not found")
+            return
+
+        if settings.dev_openclaw_url:
+            target_ws_url = settings.dev_openclaw_url.replace("http://", "ws://").replace("https://", "wss://")
+            target_ws_url = target_ws_url.rstrip("/") + "/api/terminal/ws"
+        else:
+            container = await ensure_running(db, user.id)
+            target_ws_url = f"ws://{container.internal_host}:18080/api/terminal/ws"
+
+    await websocket.accept()
+
+    import asyncio
+    import websockets
+
+    try:
+        upstream = None
+        for _attempt in range(10):
+            try:
+                upstream = await websockets.connect(target_ws_url, origin="http://127.0.0.1:8080")
+                break
+            except (ConnectionRefusedError, OSError):
+                if _attempt < 9:
+                    await asyncio.sleep(1)
+        if upstream is None:
+            await websocket.close(code=1013, reason="Terminal service not ready")
+            return
+
+        async def client_to_upstream():
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    await upstream.send(data)
+            except (WebSocketDisconnect, Exception):
+                pass
+
+        async def upstream_to_client():
+            try:
+                async for message in upstream:
+                    try:
+                        await websocket.send_text(message)
+                    except RuntimeError:
+                        break
+            except websockets.ConnectionClosed:
+                pass
+
+        tasks = [asyncio.create_task(client_to_upstream()), asyncio.create_task(upstream_to_client())]
+        try:
+            _done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for t in pending:
+                t.cancel()
+        finally:
+            await upstream.close()
+    except Exception as exc:
+        logger.error("Terminal WebSocket 代理异常: %s", exc, exc_info=True)
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass

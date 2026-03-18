@@ -48,6 +48,7 @@ const navSections = [
   {
     label: '系统',
     items: [
+      { to: '/terminal', icon: Monitor, label: '实时终端' },
       { to: '/sessions', icon: MessageSquare, label: '会话历史' },
       { to: '/cron', icon: Clock, label: '定时任务' },
       { to: '/nodes', icon: Monitor, label: 'Node 管理' },

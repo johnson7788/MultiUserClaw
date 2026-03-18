@@ -18,6 +18,7 @@ import { channelsRoutes } from "./routes/channels.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { nodesRoutes } from "./routes/nodes.js";
 import { eventsRoutes } from "./routes/events.js";
+import { createTerminalWs } from "./routes/terminal-ws.js";
 
 export interface GatewayRestartable {
   restart(): Promise<void>;
@@ -68,7 +69,7 @@ export function createServer(client: BridgeGatewayClient, config: BridgeConfig, 
   const server = http.createServer(app);
 
   // WebSocket relay: proxy external WS connections to local gateway (loopback)
-  const wss = new WebSocketServer({ server, path: "/ws" });
+  const wss = new WebSocketServer({ noServer: true });
   const gatewayUrl = `ws://127.0.0.1:${config.gatewayPort}`;
 
   wss.on("connection", (downstream) => {
@@ -116,6 +117,35 @@ export function createServer(client: BridgeGatewayClient, config: BridgeConfig, 
       console.error("[ws-relay] downstream error:", err.message);
       upstream.close();
     });
+  });
+
+  const terminalWss = createTerminalWs();
+
+  // Single upgrade dispatcher for all websocket endpoints.
+  server.on("upgrade", (request, socket, head) => {
+    let pathname = "/";
+    try {
+      pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+    } catch {
+      pathname = "/";
+    }
+
+    if (pathname === "/ws") {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+      return;
+    }
+
+    if (pathname === "/api/terminal/ws") {
+      terminalWss.handleUpgrade(request, socket, head, (ws) => {
+        terminalWss.emit("connection", ws, request);
+      });
+      return;
+    }
+
+    socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+    socket.destroy();
   });
 
   return server;

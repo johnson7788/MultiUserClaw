@@ -17,6 +17,7 @@ import SystemSettings from './pages/SystemSettings'
 import ApiAccess from './pages/ApiAccess'
 import Nodes from './pages/Nodes'
 import Plugins from './pages/Plugins'
+import TerminalPage from './pages/Terminal'
 import { isLoggedIn } from './lib/api'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="models" element={<AIModels />} />
         <Route path="files" element={<FileManager />} />
         <Route path="knowledge" element={<KnowledgeBase />} />
+        <Route path="terminal" element={<TerminalPage />} />
         <Route path="sessions" element={<Sessions />} />
         <Route path="cron" element={<CronJobs />} />
         <Route path="nodes" element={<Nodes />} />
