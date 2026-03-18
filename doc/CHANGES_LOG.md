@@ -421,3 +421,10 @@ openclaw/Dockerfile.bridge 已经包含了完整的 openclaw 主程序（COPY . 
                                                                 "你的浏览器在 host:32768"
 
   简单说：用 None 让 Docker 自动选端口，解决多用户端口冲突问题；再把分配结果通知容器内的 Agent。
+
+# 03.18
+  - 新增 agents 配置：定义 4 个 Agent（boss/programmer/researcher/hr），boss 设为默认
+  - 新增 tools.agentToAgent：开启 Agent 间通信，允许 4 个 Agent 互通
+  - 新增 tools.sessions.visibility: "tree"：boss 可以看到自己派发的子任务会话
+  - 新增 session.agentToAgent.maxPingPongTurns: 3：限制 Agent 间来回对话轮数
+  - boss 的 subagents.allowAgents 限定只能调度 programmer/researcher/hr

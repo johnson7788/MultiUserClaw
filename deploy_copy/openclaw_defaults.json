@@ -4,15 +4,103 @@
     "nativeSkills": "auto",
     "restart": true
   },
+
+  "agents": {
+    "defaults": {
+      "elevatedDefault": "full",
+      "subagents": {
+        "maxSpawnDepth": 2,
+        "maxChildrenPerAgent": 5,
+        "maxConcurrent": 3,
+        "runTimeoutSeconds": 600
+      }
+    },
+    "list": [
+      {
+        "id": "boss",
+        "default": true,
+        "workspace": "Agents/boss",
+        "subagents": {
+          "allowAgents": ["programmer", "researcher", "hr"]
+        },
+        "tools": {
+          "elevated": {
+            "enabled": true,
+            "allowFrom": { "webchat": ["*"], "web": ["*"] }
+          },
+          "exec": { "security": "full" }
+        }
+      },
+      {
+        "id": "programmer",
+        "workspace": "Agents/programmer",
+        "tools": {
+          "elevated": {
+            "enabled": true,
+            "allowFrom": { "webchat": ["*"], "web": ["*"] }
+          },
+          "exec": { "security": "full" }
+        }
+      },
+      {
+        "id": "researcher",
+        "workspace": "Agents/researcher",
+        "tools": {
+          "elevated": {
+            "enabled": true,
+            "allowFrom": { "webchat": ["*"], "web": ["*"] }
+          },
+          "exec": { "security": "full" }
+        }
+      },
+      {
+        "id": "hr",
+        "workspace": "Agents/hr",
+        "tools": {
+          "elevated": {
+            "enabled": true,
+            "allowFrom": { "webchat": ["*"], "web": ["*"] }
+          },
+          "exec": { "security": "full" }
+        }
+      }
+    ]
+  },
+
   "tools": {
     "profile": "full",
+    "elevated": {
+      "enabled": true,
+      "allowFrom": {
+        "webchat": ["*"],
+        "web": ["*"],
+        "slack": ["*"],
+        "telegram": ["*"],
+        "discord": ["*"]
+      }
+    },
+    "exec": {
+      "security": "full",
+      "host": "gateway"
+    },
+    "agentToAgent": {
+      "enabled": true,
+      "allow": ["boss", "programmer", "researcher", "hr"]
+    },
+    "sessions": {
+      "visibility": "tree"
+    },
     "web": {
       "search": {
         "enabled": true
       }
     }
   },
+
   "session": {
-    "dmScope": "per-channel-peer"
+    "dmScope": "per-channel-peer",
+    "agentToAgent": {
+      "maxPingPongTurns": 3
+    }
   }
 }

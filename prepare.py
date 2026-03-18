@@ -297,10 +297,34 @@ def check_platform_deps(fix: bool) -> CheckResult:
     return CheckResult(False, "platform 依赖安装失败，请手动运行: uv pip install -e platform/")
 
 
+def _which(cmd: str) -> str | None:
+    """查找可执行文件路径。优先 shutil.which，Windows 上回退到 PowerShell Get-Command。"""
+    path = shutil.which(cmd)
+    if path:
+        return path
+    if IS_WINDOWS:
+        try:
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 f"(Get-Command {cmd} -ErrorAction SilentlyContinue).Source"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if r.returncode == 0 and r.stdout.strip():
+                found = r.stdout.strip()
+                # 将找到的目录加到 PATH，使后续 subprocess 调用也能找到
+                bin_dir = str(Path(found).parent)
+                if bin_dir not in os.environ.get("PATH", ""):
+                    os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+                return found
+        except Exception:
+            pass
+    return None
+
+
 def check_nodejs() -> CheckResult:
     """检查 Node.js (≥ 18) 和 npm 是否已安装。"""
-    node = shutil.which("node")
-    npm  = shutil.which("npm")
+    node = _which("node")
+    npm  = _which("npm")
 
     if not node or not npm:
         missing = []
