@@ -48,6 +48,7 @@ const CHANNEL_CATALOG: Array<{ id: string; label: string; description: string; i
   { id: 'zalo', label: 'Zalo', description: '通过 Zalo OA API 接入', icon: '🔵' },
   { id: 'qqbot', label: 'QQ', description: '通过 QQ 机器人接入（需安装 QQBot 插件）', icon: '🐧' },
   { id: 'wecom', label: '企业微信', description: '通过企业微信 AI Bot WebSocket 接入（需安装 WeCom 插件）', icon: '💼' },
+  { id: 'dingtalk', label: '钉钉', description: '通过钉钉企业机器人接入（需安装 DingTalk 插件）', icon: '💙' },
 ]
 
 const CHANNEL_ICONS: Record<string, string> = Object.fromEntries(
@@ -306,6 +307,21 @@ const CHANNEL_CONFIG_FIELDS: Record<string, ChannelField[]> = {
     { key: 'groupPolicy', label: '群聊策略', type: 'select', options: GROUP_POLICY_OPTIONS },
     { key: 'groupAllowFrom', label: '允许的群组', type: 'text', hint: '逗号分隔的群组 ID' },
     { key: 'sendThinkingMessage', label: '发送思考中提示', type: 'boolean', hint: '回复前显示"正在思考"占位消息' },
+  ],
+  dingtalk: [
+    { key: 'clientId', label: 'Client ID', type: 'text', required: true, hint: '钉钉开放平台应用的 Client ID（AppKey）' },
+    { key: 'clientSecret', label: 'Client Secret', type: 'password', required: true, hint: '钉钉开放平台应用的 Client Secret（AppSecret）' },
+    { key: 'robotCode', label: 'Robot Code', type: 'text', required: true, hint: '钉钉机器人的 robotCode' },
+    { key: 'corpId', label: 'Corp ID', type: 'text', hint: '企业的 corpId' },
+    { key: 'agentId', label: 'Agent ID', type: 'text', hint: '钉钉应用的 agentId' },
+    { key: 'enabled', label: '启用', type: 'boolean' },
+    { key: 'dmPolicy', label: '私聊策略', type: 'select', options: DM_POLICY_OPTIONS, hint: '控制谁可以私聊机器人' },
+    { key: 'groupPolicy', label: '群聊策略', type: 'select', options: GROUP_POLICY_OPTIONS },
+    { key: 'messageType', label: '消息类型', type: 'select', options: [
+      { value: 'text', label: 'text — 纯文本' },
+      { value: 'markdown', label: 'markdown — Markdown 格式' },
+    ], hint: '机器人回复的消息格式' },
+    { key: 'debug', label: '调试模式', type: 'boolean', hint: '开启后输出详细日志' },
   ],
 }
 

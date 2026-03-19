@@ -201,12 +201,12 @@ export function pluginsRoutes(config: BridgeConfig): Router {
     res.json(Array.from(pluginMap.values()));
   }));
 
-  // POST /api/plugins/install — install an OpenClaw extension (npm package)
+  // POST /api/plugins/install — install an OpenClaw extension (npm package or git URL)
   router.post("/plugins/install", asyncHandler(async (req, res) => {
     const { spec } = req.body as { spec?: string };
 
     if (!spec || typeof spec !== "string") {
-      res.status(400).json({ detail: "spec is required (e.g. '@openclaw/feishu')" });
+      res.status(400).json({ detail: "spec is required (e.g. '@openclaw/feishu' or a git URL)" });
       return;
     }
 
@@ -217,15 +217,73 @@ export function pluginsRoutes(config: BridgeConfig): Router {
     }
 
     const openclawDir = process.env.OPENCLAW_DIR || process.cwd();
+    const isGitUrl = spec.endsWith(".git") || spec.startsWith("git://") || spec.startsWith("git+");
 
-    // Run: node openclaw.mjs plugins install <spec>
+    // For git URLs: clone to temp dir first, then install from local path
+    if (isGitUrl) {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-git-plugin-"));
+      try {
+        // Clone the repo
+        await new Promise<void>((resolve, reject) => {
+          execFile("git", ["clone", "--depth", "1", spec, tmpDir], {
+            timeout: 120_000,
+          }, (err, _stdout, stderr) => {
+            if (err) {
+              reject(new Error(`git clone failed: ${stderr || err.message}`));
+            } else {
+              resolve();
+            }
+          });
+        });
+
+        // Install from the cloned local path
+        await new Promise<void>((resolve, reject) => {
+          const child = execFile(process.execPath, [cliPath, "plugins", "install", tmpDir], {
+            cwd: openclawDir,
+            timeout: 180_000,
+            env: {
+              ...process.env,
+              OPENCLAW_CONFIG_PATH: path.join(config.openclawHome, "openclaw.json"),
+              OPENCLAW_STATE_DIR: config.openclawHome,
+              npm_config_registry: process.env.npm_config_registry || "https://registry.npmmirror.com",
+            },
+          }, (err, stdout, stderr) => {
+            if (err) {
+              const output = (stdout || "") + (stderr || "");
+              reject(new Error(output || err.message));
+            } else {
+              const output = (stdout || "") + (stderr || "");
+              console.log(`[bridge] Plugin installed from git: ${spec}`);
+              res.json({ ok: true, output: output.trim() });
+              resolve();
+            }
+          });
+          child.stdin?.write("y\n");
+          child.stdin?.end();
+        });
+      } catch (err: any) {
+        console.error(`[bridge] Git plugin install failed: ${err.message}`);
+        res.status(500).json({
+          detail: `Installation failed: ${err.message}`,
+          output: err.message,
+        });
+      } finally {
+        // Clean up temp dir
+        try { fs.rmSync(tmpDir, { recursive: true }); } catch { /* ignore */ }
+      }
+      return;
+    }
+
+    // Standard npm spec install
     const child = execFile(process.execPath, [cliPath, "plugins", "install", spec], {
       cwd: openclawDir,
-      timeout: 120_000,
+      timeout: 180_000,
       env: {
         ...process.env,
         OPENCLAW_CONFIG_PATH: path.join(config.openclawHome, "openclaw.json"),
         OPENCLAW_STATE_DIR: config.openclawHome,
+        // Use npm mirror for faster downloads in China
+        npm_config_registry: process.env.npm_config_registry || "https://registry.npmmirror.com",
       },
     }, (err, stdout, stderr) => {
       if (err) {
