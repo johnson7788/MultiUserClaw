@@ -428,3 +428,20 @@ openclaw/Dockerfile.bridge 已经包含了完整的 openclaw 主程序（COPY . 
   - 新增 tools.sessions.visibility: "tree"：boss 可以看到自己派发的子任务会话
   - 新增 session.agentToAgent.maxPingPongTurns: 3：限制 Agent 间来回对话轮数
   - boss 的 subagents.allowAgents 限定只能调度 programmer/researcher/hr
+
+
+# 0319
+默认Agent的角色
+  老板（你）
+    ├── main（默认入口）⭐
+    │     └── manager（经理）📋
+    │           ├── programmer 💻
+    │           ├── researcher 🔬
+    │           └── hr 🤝
+    └── doctor（医生）🩺  ← 独立顶层角色
+
+  关键改动：
+  - main = "default": true，所有消息先到 main
+  - main 只能调度 manager（allowAgents: ["manager"]）
+  - manager 去掉了 default，由 main 按需调度，再分配给 programmer/researcher/hr
+  - agentToAgent.allow 加入了 "main"

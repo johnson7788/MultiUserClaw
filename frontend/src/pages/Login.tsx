@@ -54,7 +54,7 @@ export default function Login() {
           <div>
             <input
               type="text"
-              placeholder={mode === 'login' ? 'Username or email' : 'Username'}
+              placeholder={mode === 'login' ? '用户名或邮箱' : '用户名'}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
@@ -66,7 +66,7 @@ export default function Login() {
             <div>
               <input
                 type="email"
-                placeholder="Email"
+                placeholder="邮箱"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -78,7 +78,7 @@ export default function Login() {
           <div>
             <input
               type="password"
-              placeholder="Password"
+              placeholder="密码"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -94,9 +94,9 @@ export default function Login() {
             {loading ? (
               <Loader2 className="mx-auto h-5 w-5 animate-spin" />
             ) : mode === 'login' ? (
-              'Sign In'
+              '登录'
             ) : (
-              'Create Account'
+              '注册'
             )}
           </button>
         </form>
@@ -105,24 +105,24 @@ export default function Login() {
         <p className="mt-6 text-center text-sm text-dark-muted">
           {mode === 'login' ? (
             <>
-              Don&apos;t have an account?{' '}
+              还没有账号？{' '}
               <button
                 type="button"
                 onClick={() => { setMode('register'); setError('') }}
                 className="text-accent-blue hover:underline"
               >
-                Register
+                注册
               </button>
             </>
           ) : (
             <>
-              Already have an account?{' '}
+              已有账号？{' '}
               <button
                 type="button"
                 onClick={() => { setMode('login'); setError('') }}
                 className="text-accent-blue hover:underline"
               >
-                Sign In
+                登录
               </button>
             </>
           )}

@@ -1,0 +1,21 @@
+{
+  "id": "searxng",
+  "kind": "tool",
+  "uiHints": {
+    "baseUrl": {
+      "label": "SearXNG Base URL",
+      "placeholder": "http://localhost:8888/search",
+      "help": "SearXNG instance search endpoint URL"
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "description": "SearXNG instance search endpoint URL"
+      }
+    }
+  }
+}

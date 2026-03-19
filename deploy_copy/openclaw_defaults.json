@@ -17,9 +17,23 @@
     },
     "list": [
       {
-        "id": "boss",
+        "id": "main",
         "default": true,
-        "workspace": "Agents/boss",
+        "workspace": "Agents/main",
+        "subagents": {
+          "allowAgents": ["manager"]
+        },
+        "tools": {
+          "elevated": {
+            "enabled": true,
+            "allowFrom": { "webchat": ["*"], "web": ["*"] }
+          },
+          "exec": { "security": "full" }
+        }
+      },
+      {
+        "id": "manager",
+        "workspace": "Agents/manager",
         "subagents": {
           "allowAgents": ["programmer", "researcher", "hr"]
         },
@@ -63,6 +77,17 @@
           },
           "exec": { "security": "full" }
         }
+      },
+      {
+        "id": "doctor",
+        "workspace": "Agents/doctor",
+        "tools": {
+          "elevated": {
+            "enabled": true,
+            "allowFrom": { "webchat": ["*"], "web": ["*"] }
+          },
+          "exec": { "security": "full" }
+        }
       }
     ]
   },
@@ -85,7 +110,7 @@
     },
     "agentToAgent": {
       "enabled": true,
-      "allow": ["boss", "programmer", "researcher", "hr"]
+      "allow": ["main", "manager", "programmer", "researcher", "hr", "doctor"]
     },
     "sessions": {
       "visibility": "tree"
@@ -93,6 +118,17 @@
     "web": {
       "search": {
         "enabled": true
+      }
+    }
+  },
+
+  "plugins": {
+    "enabled": true,
+    "allow": ["searxng"],
+    "entries": {
+      "searxng": {
+        "enabled": true,
+        "config": {}
       }
     }
   },

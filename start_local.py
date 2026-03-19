@@ -610,7 +610,25 @@ def sync_deploy_copy():
         os.makedirs(dst_skills, exist_ok=True)
         copied += _sync_dir(src_skills, dst_skills)
 
-    # 3. 合并 openclaw_defaults.json 到 openclaw.json
+    # 3. 同步 SSH 密钥
+    src_ssh = os.path.join(deploy_dir, "ssh")
+    dst_ssh = os.path.join(os.path.expanduser("~"), ".ssh")
+    if os.path.isdir(src_ssh):
+        os.makedirs(dst_ssh, exist_ok=True)
+        for f in os.listdir(src_ssh):
+            src_file = os.path.join(src_ssh, f)
+            dst_file = os.path.join(dst_ssh, f)
+            if os.path.isfile(src_file) and not os.path.exists(dst_file):
+                shutil.copy2(src_file, dst_file)
+                # Set proper permissions
+                if f.endswith('.pub') or f in ('config', 'known_hosts'):
+                    os.chmod(dst_file, 0o644)
+                else:
+                    os.chmod(dst_file, 0o600)
+                log(f"  + .ssh/{f}")
+                copied += 1
+
+    # 4. 合并 openclaw_defaults.json 到 openclaw.json
     defaults_path = os.path.join(deploy_dir, "openclaw_defaults.json")
     config_path = os.path.join(openclaw_home, "openclaw.json")
     if os.path.isfile(defaults_path):

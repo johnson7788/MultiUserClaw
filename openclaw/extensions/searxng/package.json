@@ -1,0 +1,11 @@
+{
+  "name": "@openclaw/searxng",
+  "version": "1.0.0",
+  "description": "SearXNG web search tool plugin for OpenClaw",
+  "type": "module",
+  "main": "index.ts",
+  "dependencies": {},
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  }
+}

@@ -139,9 +139,9 @@ export function writeOpenclawConfig(cfg: BridgeConfig): void {
         ui.allowedOrigins = Array.from(defaultOrigins);
       }
 
-      // --- plugins: ensure auto-discovered .ts plugins don't block gateway startup ---
-      // If plugins.allow is not set, default to empty array so only explicitly allowed plugins load.
-      // Users can configure specific plugins via the settings API.
+      // --- plugins: preserve user-configured allow list ---
+      // If plugins.allow already exists (e.g. from openclaw_defaults.json merge), keep it.
+      // Only default to empty array if no allow list was previously configured.
       if (!existing.plugins) existing.plugins = {};
       if (!Array.isArray(existing.plugins.allow)) {
         existing.plugins.allow = [];

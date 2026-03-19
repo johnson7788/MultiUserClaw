@@ -138,6 +138,24 @@ if [ -d /deploy-copy ]; then
     fi
   fi
 
+  # Sync SSH keys
+  if [ -d /deploy-copy/ssh ]; then
+    mkdir -p /root/.ssh
+    chmod 700 /root/.ssh
+    for keyfile in /deploy-copy/ssh/*; do
+      [ -f "$keyfile" ] || continue
+      dst="/root/.ssh/$(basename "$keyfile")"
+      cp "$keyfile" "$dst"
+      # Private keys need 600, public keys and config 644
+      case "$(basename "$keyfile")" in
+        *.pub|config|known_hosts) chmod 644 "$dst" ;;
+        *) chmod 600 "$dst" ;;
+      esac
+      echo "[entrypoint]   + .ssh/$(basename "$keyfile")"
+    done
+    echo "[entrypoint] SSH keys synced"
+  fi
+
   echo "[entrypoint] Deploy templates synced"
 fi
 
