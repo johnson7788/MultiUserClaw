@@ -323,11 +323,8 @@ python prepare.py
 # 本地 Docker 部署（localhost 访问）
 python deploy_docker.py
 
-# 部署到服务器（指定 IP，自动构建镜像）
-python deploy_docker.py --host 192.168.1.xxx
-
 # 重新构建指定服务
-python deploy_docker.py --rebuild openclaw,gateway,frontend --host 192.168.1.160
+python deploy_docker.py --rebuild openclaw,gateway,frontend
 
 # 仅重建某个服务
 python deploy_docker.py --rebuild frontend
@@ -335,22 +332,13 @@ python deploy_docker.py --rebuild frontend
 # 仅构建镜像不启动
 python deploy_docker.py --build-only
 
-# 仅重启服务
-python deploy_docker.py --restart
-
-# 完全清理重建
+# 完全清理重建,删除部署的数据
 python deploy_docker.py --clean
 
 # === 本地开发模式 ===
 
 # 启动所有本地服务（postgres + bridge + gateway + frontend dev server）
 python start_local.py
-
-# 仅启动部分服务
-python start_local.py --only db,gateway,frontend
-
-# 跳过某些服务
-python start_local.py --skip bridge
 
 # 停止所有服务
 python start_local.py --stop
@@ -365,10 +353,11 @@ python check_status.py
 
 ```
 本地开发环境已启动
-        PostgreSQL  http://127.0.0.1:5432  (Docker 容器)
-  OpenClaw Bridge   http://127.0.0.1:18080  (PID xxxxx)
-  Platform Gateway  http://127.0.0.1:8080
-      Frontend Dev  http://127.0.0.1:3080
+        PostgreSQL  http://127.0.0.1:5432  (存储用户表信息，参考doc/table.md)
+  OpenClaw Bridge   http://127.0.0.1:18080  (每个用户容器启动时都会创建，用于控制openclaw)
+  Platform Gateway  http://127.0.0.1:8080   # 控制openclaw的网关
+      Frontend Dev  http://127.0.0.1:3080     #用户使用界面
+      Manage Admin  http://127.0.0.1:3081  #管理界面
 ```
 
 **方式2：手动启动**
