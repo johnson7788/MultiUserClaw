@@ -1,20 +1,79 @@
 #!/usr/bin/env python3
-"""Nanobot platform health check script.
+"""OpenClaw 本地开发环境状态检查脚本。
 
-Checks all services: postgres, gateway, user containers (openclaw-bridge), frontend.
-Usage: python check_status.py [--gateway http://localhost:8080]
+检查所有服务状态：PostgreSQL, OpenClaw Bridge, Platform Gateway, Frontend, Manage Admin。
+用法: python check_status.py [--local-only]
 """
 
 import argparse
-import json
+import socket
 import subprocess
 import sys
 
-import httpx
+# ── 颜色输出 ──────────────────────────────────────────────────────────
+GREEN  = "\033[32m"
+RED    = "\033[31m"
+YELLOW = "\033[33m"
+CYAN   = "\033[36m"
+BOLD   = "\033[1m"
+DIM    = "\033[2m"
+RESET  = "\033[0m"
+
+# ── 服务配置（与 start_local.py 一致）────────────────────────────────
+SERVICES = {
+    "db": {
+        "name": "PostgreSQL",
+        "port": 5432,
+        "color": "\033[34m",
+    },
+    "bridge": {
+        "name": "OpenClaw Bridge",
+        "port": 18080,
+        "color": "\033[35m",
+    },
+    "gateway": {
+        "name": "Platform Gateway",
+        "port": 8080,
+        "color": "\033[36m",
+    },
+    "frontend": {
+        "name": "Frontend Dev",
+        "port": 3080,
+        "color": "\033[33m",
+    },
+    "manage": {
+        "name": "Manage Admin",
+        "port": 3081,
+        "color": "\033[32m",
+    },
+}
 
 
 def check_mark(ok: bool) -> str:
-    return "\033[32m✓\033[0m" if ok else "\033[31m✗\033[0m"
+    return f"{GREEN}✓{RESET}" if ok else f"{RED}✗{RESET}"
+
+
+def warn_mark() -> str:
+    return f"{YELLOW}⚠{RESET}"
+
+
+def is_port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _detect_lan_ip() -> str:
+    """探测局域网 IP（与 start_local.py 一致）。"""
+    _TUNNEL_PREFIXES = ("198.18.", "198.19.", "100.64.")
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            if ip and not any(ip.startswith(p) for p in _TUNNEL_PREFIXES):
+                return ip
+    except OSError:
+        pass
+    return "127.0.0.1"
 
 
 def run_cmd(cmd: list[str], timeout: int = 5) -> tuple[bool, str]:
@@ -25,199 +84,200 @@ def run_cmd(cmd: list[str], timeout: int = 5) -> tuple[bool, str]:
         return False, str(e)
 
 
-def check_docker_containers() -> dict[str, dict]:
-    """Check status of all nanobot-related Docker containers."""
+# ── 各服务检查 ────────────────────────────────────────────────────────
+
+def check_postgres() -> tuple[bool, str]:
+    """检查 PostgreSQL Docker 容器状态。"""
+    # 检查容器是否在运行
     ok, out = run_cmd([
-        "docker", "ps", "-a",
-        "--filter", "name=nanobot",
-        "--format", "{{.Names}}\t{{.Status}}\t{{.Image}}",
+        "docker", "ps", "-q", "--filter", "name=^openclaw-local-postgres$",
     ])
-    results = {}
-    if not ok or not out:
-        return results
-    for line in out.splitlines():
-        parts = line.split("\t")
-        if len(parts) >= 2:
-            name, status = parts[0], parts[1]
-            running = status.startswith("Up")
-            results[name] = {"status": status, "running": running}
-    return results
+    if not ok or not out.strip():
+        # 检查是否有已停止的容器
+        ok2, out2 = run_cmd([
+            "docker", "ps", "-aq", "--filter", "name=^openclaw-local-postgres$",
+        ])
+        if ok2 and out2.strip():
+            return False, "容器已停止"
+        return False, "容器不存在"
+
+    # 容器在运行，检查 pg_isready
+    ok, out = run_cmd([
+        "docker", "exec", "openclaw-local-postgres",
+        "pg_isready", "-U", "nanobot", "-d", "nanobot_platform",
+    ])
+    if ok:
+        return True, "运行中，数据库就绪"
+    return False, f"容器运行中但数据库未就绪: {out}"
 
 
-def find_postgres_container() -> str | None:
-    """Find the postgres container name dynamically."""
-    ok, out = run_cmd([
-        "docker", "ps", "--filter", "name=postgres",
-        "--format", "{{.Names}}",
-    ])
-    if ok and out:
-        # Return first matching container
-        return out.splitlines()[0] if out.splitlines() else None
+def check_bridge() -> tuple[bool, str]:
+    """检查 OpenClaw Bridge (端口 18080)。"""
+    if not is_port_in_use(18080):
+        return False, "端口 18080 未监听"
+
+    # 尝试 HTTP ping
+    try:
+        import httpx
+        r = httpx.get("http://127.0.0.1:18080/api/ping", timeout=5.0)
+        if r.status_code < 400:
+            try:
+                body = r.json()
+                if body.get("message") == "pong":
+                    return True, "运行中，API 正常 (pong)"
+            except Exception:
+                pass
+            return True, f"运行中 (HTTP {r.status_code})"
+        return True, f"端口已监听，但 API 异常 (HTTP {r.status_code})"
+    except ImportError:
+        return True, "端口已监听（httpx 未安装，跳过 API 检查）"
+    except Exception:
+        return True, "端口已监听，API 未响应（可能仍在启动）"
+
+
+def check_gateway() -> tuple[bool, str]:
+    """检查 Platform Gateway (端口 8080)。"""
+    if not is_port_in_use(8080):
+        return False, "端口 8080 未监听"
+
+    try:
+        import httpx
+        r = httpx.get("http://127.0.0.1:8080/api/ping", timeout=5.0)
+        if r.status_code < 400:
+            try:
+                body = r.json()
+                if body.get("message") == "pong":
+                    return True, "运行中，API 正常 (pong)"
+            except Exception:
+                pass
+            return True, f"运行中 (HTTP {r.status_code})"
+        return True, f"端口已监听，但 API 异常 (HTTP {r.status_code})"
+    except ImportError:
+        return True, "端口已监听（httpx 未安装，跳过 API 检查）"
+    except Exception:
+        return True, "端口已监听，API 未响应（可能仍在启动）"
+
+
+def check_frontend() -> tuple[bool, str]:
+    """检查 Frontend Dev Server (端口 3080)。"""
+    if not is_port_in_use(3080):
+        return False, "端口 3080 未监听"
+
+    try:
+        import httpx
+        r = httpx.get("http://127.0.0.1:3080/", timeout=5.0, follow_redirects=True)
+        if r.status_code < 400:
+            return True, f"运行中 (HTTP {r.status_code})"
+        return True, f"端口已监听，但响应异常 (HTTP {r.status_code})"
+    except ImportError:
+        return True, "端口已监听（httpx 未安装，跳过 HTTP 检查）"
+    except Exception:
+        return True, "端口已监听"
+
+
+def check_manage() -> tuple[bool, str]:
+    """检查 Manage Admin Dev Server (端口 3081)。"""
+    if not is_port_in_use(3081):
+        return False, "端口 3081 未监听"
+
+    try:
+        import httpx
+        r = httpx.get("http://127.0.0.1:3081/", timeout=5.0, follow_redirects=True)
+        if r.status_code < 400:
+            return True, f"运行中 (HTTP {r.status_code})"
+        return True, f"端口已监听，但响应异常 (HTTP {r.status_code})"
+    except ImportError:
+        return True, "端口已监听（httpx 未安装，跳过 HTTP 检查）"
+    except Exception:
+        return True, "端口已监听"
+
+
+# ── 查找进程 PID ─────────────────────────────────────────────────────
+
+def find_pid_on_port(port: int) -> str | None:
+    """通过 lsof 查找占用端口的进程 PID。"""
+    ok, out = run_cmd(["lsof", "-ti", f":{port}"])
+    if ok and out.strip():
+        # 可能有多个 PID，取第一个
+        return out.strip().split("\n")[0]
     return None
 
 
-def check_postgres() -> tuple[bool, str]:
-    """Check PostgreSQL via docker exec."""
-    container = find_postgres_container()
-    if not container:
-        return False, "PostgreSQL container not found"
-    ok, out = run_cmd([
-        "docker", "exec", container,
-        "pg_isready", "-U", "nanobot", "-d", "nanobot_platform",
-    ])
-    return ok, out
-
-
-def check_http(url: str, timeout: float = 5.0) -> tuple[bool, int | None, dict | str | None]:
-    """GET an HTTP endpoint. Returns (ok, status_code, body)."""
-    try:
-        r = httpx.get(url, timeout=timeout)
-        try:
-            body = r.json()
-        except Exception:
-            body = r.text[:200]
-        return r.status_code < 400, r.status_code, body
-    except httpx.ConnectError:
-        return False, None, "Connection refused"
-    except httpx.TimeoutException:
-        return False, None, "Timeout"
-    except Exception as e:
-        return False, None, str(e)
-
-
-def check_gateway_ping(base: str) -> tuple[bool, str]:
-    ok, code, body = check_http(f"{base}/api/ping")
-    if ok and isinstance(body, dict) and body.get("message") == "pong":
-        return True, "pong"
-    return False, f"HTTP {code}: {body}"
-
-
-def check_gateway_llm_proxy(base: str, token: str) -> tuple[bool, str]:
-    """Check if the LLM proxy endpoint is reachable (auth will fail but endpoint should respond)."""
-    try:
-        r = httpx.post(
-            f"{base}/llm/v1/chat/completions",
-            json={"model": "test", "messages": [{"role": "user", "content": "hi"}]},
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=5.0,
-        )
-        # 401/422 means the endpoint works (just bad auth/payload)
-        if r.status_code in (401, 422):
-            return True, f"Endpoint reachable (HTTP {r.status_code})"
-        return False, f"HTTP {r.status_code}: {r.text[:100]}"
-    except Exception as e:
-        return False, str(e)
-
-
-def check_user_containers() -> list[dict]:
-    """Find and check running nanobot user containers."""
-    ok, out = run_cmd([
-        "docker", "ps",
-        "--filter", "name=nanobot-user-",
-        "--format", "{{.Names}}\t{{.Status}}",
-    ])
-    containers = []
-    if not ok or not out:
-        return containers
-    for line in out.splitlines():
-        parts = line.split("\t")
-        if len(parts) < 2:
-            continue
-        name, status = parts[0], parts[1]
-        # Container is on internal network — use docker exec + node to check
-        web_ok, web_out = run_cmd([
-            "docker", "exec", name,
-            "node", "-e",
-            "fetch('http://localhost:18080/api/ping')"
-            ".then(r=>r.json())"
-            ".then(d=>{console.log(d.message);process.exit(0)})"
-            ".catch(()=>process.exit(1))",
-        ], timeout=10)
-        web_ok = web_ok and "pong" in web_out
-        containers.append({
-            "name": name,
-            "status": status,
-            "web_ok": web_ok,
-        })
-    return containers
-
-
-def check_frontend(url: str) -> tuple[bool, str]:
-    """Check if the frontend is reachable."""
-    try:
-        r = httpx.get(url, timeout=5.0, follow_redirects=True)
-        ok = r.status_code < 400
-        return ok, f"HTTP {r.status_code}"
-    except Exception as e:
-        return False, str(e)
-
+# ── 主入口 ────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="Nanobot platform health check")
-    parser.add_argument("--gateway", default="http://localhost:8080", help="Gateway URL")
-    parser.add_argument("--frontend", default="http://localhost:3080", help="Frontend URL")
+    parser = argparse.ArgumentParser(description="OpenClaw 本地开发环境状态检查")
+    parser.add_argument("--local-only", action="store_true", help="仅检查本机地址")
     args = parser.parse_args()
 
+    lan_ip = "127.0.0.1" if args.local_only else _detect_lan_ip()
+
+    print(f"\n{BOLD}🔍 OpenClaw 本地开发环境状态检查{RESET}\n")
+
+    checkers = {
+        "db": check_postgres,
+        "bridge": check_bridge,
+        "gateway": check_gateway,
+        "frontend": check_frontend,
+        "manage": check_manage,
+    }
+
     all_ok = True
-    print("=== Nanobot Health Check ===\n")
+    results = []
 
-    # 1. Docker containers
-    print("Docker Containers:")
-    containers = check_docker_containers()
-    if not containers:
-        print(f"  {check_mark(False)} No nanobot containers found")
-        all_ok = False
-    else:
-        for name, info in sorted(containers.items()):
-            ok = info["running"]
-            if not ok:
-                all_ok = False
-            print(f"  {check_mark(ok)} {name}: {info['status']}")
+    for svc_id, checker in checkers.items():
+        svc = SERVICES[svc_id]
+        ok, msg = checker()
 
-    # 2. PostgreSQL
-    print("\nPostgreSQL:")
-    pg_ok, pg_msg = check_postgres()
-    if not pg_ok:
-        all_ok = False
-    print(f"  {check_mark(pg_ok)} {pg_msg or 'not reachable'}")
+        # 查找 PID（非 Docker 服务）
+        pid_info = ""
+        if svc_id == "db":
+            pid_info = "Docker"
+        elif ok:
+            pid = find_pid_on_port(svc["port"])
+            pid_info = f"PID {pid}" if pid else ""
 
-    # 3. Gateway
-    print(f"\nGateway ({args.gateway}):")
-    gw_ok, gw_msg = check_gateway_ping(args.gateway)
-    if not gw_ok:
-        all_ok = False
-    print(f"  {check_mark(gw_ok)} /api/ping: {gw_msg}")
-
-    llm_ok, llm_msg = check_gateway_llm_proxy(args.gateway, "dummy-token")
-    if not llm_ok:
-        all_ok = False
-    print(f"  {check_mark(llm_ok)} /llm/v1/chat/completions: {llm_msg}")
-
-    # 4. User containers (internal web servers)
-    print("\nUser Containers:")
-    user_containers = check_user_containers()
-    if not user_containers:
-        print("  (none running)")
-    for c in user_containers:
-        ok = c["web_ok"]
+        results.append((svc_id, ok, msg, pid_info))
         if not ok:
             all_ok = False
-        web_info = "web OK" if c["web_ok"] else "web unreachable"
-        print(f"  {check_mark(ok)} {c['name']}: {c['status']} ({web_info})")
 
-    # 5. Frontend
-    print(f"\nFrontend ({args.frontend}):")
-    fe_ok, fe_msg = check_frontend(args.frontend)
-    if not fe_ok:
-        all_ok = False
-    print(f"  {check_mark(fe_ok)} {fe_msg}")
+    # 打印结果
+    print(f"{'=' * 60}")
+    for svc_id, ok, msg, pid_info in results:
+        svc = SERVICES[svc_id]
+        mark = check_mark(ok)
+        addr = f"http://{lan_ip}:{svc['port']}"
+        pid_str = f"  ({pid_info})" if pid_info else ""
+        print(f"  {mark} {svc['color']}{svc['name']:>20}{RESET}  {addr}{pid_str}")
+        print(f"     {DIM}{msg}{RESET}")
+    print(f"{'=' * 60}")
 
-    # Summary
-    print(f"\n{'=' * 30}")
+    # 总结
+    ok_count = sum(1 for _, ok, _, _ in results if ok)
+    total = len(results)
     if all_ok:
-        print(f"{check_mark(True)} All checks passed")
+        print(f"\n  {GREEN}{BOLD}所有服务正常 ({ok_count}/{total}){RESET}\n")
     else:
-        print(f"{check_mark(False)} Some checks failed")
+        fail_count = total - ok_count
+        print(f"\n  {RED}{BOLD}{fail_count} 个服务异常{RESET}，{ok_count}/{total} 正常\n")
+
+        # 给出修复建议
+        for svc_id, ok, msg, _ in results:
+            if ok:
+                continue
+            svc = SERVICES[svc_id]
+            if svc_id == "db":
+                print(f"  {YELLOW}💡 {svc['name']}: docker start openclaw-local-postgres 或 python start_local.py{RESET}")
+            elif svc_id == "bridge":
+                print(f"  {YELLOW}💡 {svc['name']}: python start_local.py --only db,bridge{RESET}")
+            elif svc_id == "gateway":
+                print(f"  {YELLOW}💡 {svc['name']}: python start_local.py --only gateway{RESET}")
+            elif svc_id == "frontend":
+                print(f"  {YELLOW}💡 {svc['name']}: python start_local.py --only frontend{RESET}")
+            elif svc_id == "manage":
+                print(f"  {YELLOW}💡 {svc['name']}: python start_local.py --only manage{RESET}")
+        print()
+
     return 0 if all_ok else 1
 
 
